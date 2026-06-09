@@ -1,0 +1,19 @@
+{
+  "appId": "com.tacticboss.ai",
+  "appName": "Tactic Boss AI",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 1800,
+      "backgroundColor": "#070b13",
+      "showSpinner": false
+    },
+    "StatusBar": {
+      "style": "DARK",
+      "backgroundColor": "#070b13"
+    }
+  }
+}
