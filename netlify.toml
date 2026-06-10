@@ -1,13 +1,12 @@
 [build]
-  command = "npm run build"
-  publish = "dist"
+  publish = "."
 
 [functions]
   directory = "netlify/functions"
 
 [build.environment]
   SECRETS_SCAN_OMIT_KEYS = "SUPABASE_URL,SUPABASE_ANON_KEY,OAUTH_REDIRECT_URL"
-  SECRETS_SCAN_OMIT_PATHS = "dist/runtime-config.js,public/runtime-config.js,READ_ME_FIRST.txt"
+  SECRETS_SCAN_OMIT_PATHS = "runtime-config.js,READ_ME_FIRST.txt"
 
 [[redirects]]
   from = "/api/vision-analysis"
