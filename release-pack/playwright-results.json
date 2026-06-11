@@ -1,0 +1,329 @@
+{
+  "config": {
+    "configFile": "/mnt/data/work_v104/playwright.config.ts",
+    "rootDir": "/mnt/data/work_v104/tests/e2e",
+    "forbidOnly": false,
+    "fullyParallel": false,
+    "globalSetup": null,
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {
+      "actualWorkers": 1
+    },
+    "preserveOutput": "always",
+    "projects": [
+      {
+        "outputDir": "/mnt/data/work_v104/test-results",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "",
+        "name": "",
+        "testDir": "/mnt/data/work_v104/tests/e2e",
+        "testIgnore": [],
+        "testMatch": [
+          "**/*.@(spec|test).?(c|m)[jt]s?(x)"
+        ],
+        "timeout": 30000
+      }
+    ],
+    "quiet": false,
+    "reporter": [
+      [
+        "list",
+        null
+      ],
+      [
+        "json",
+        {
+          "outputFile": "release-pack/playwright-results.json"
+        }
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "shard": null,
+    "tags": [],
+    "updateSnapshots": "missing",
+    "updateSourceMethod": "patch",
+    "version": "1.60.0",
+    "workers": 28,
+    "webServer": null
+  },
+  "suites": [
+    {
+      "title": "public-smoke.spec.ts",
+      "file": "public-smoke.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "public production smoke",
+          "file": "public-smoke.spec.ts",
+          "line": 24,
+          "column": 6,
+          "specs": [
+            {
+              "title": "mobile login screen is usable and guest access is absent",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 555,
+                      "error": {
+                        "message": "Error: page.goto: net::ERR_BLOCKED_BY_ADMINISTRATOR at http://127.0.0.1:4173/\nCall log:\n\u001b[2m  - navigating to \"http://127.0.0.1:4173/\", waiting until \"load\"\u001b[22m\n",
+                        "stack": "Error: page.goto: net::ERR_BLOCKED_BY_ADMINISTRATOR at http://127.0.0.1:4173/\nCall log:\n\u001b[2m  - navigating to \"http://127.0.0.1:4173/\", waiting until \"load\"\u001b[22m\n\n    at /mnt/data/work_v104/tests/e2e/public-smoke.spec.ts:31:16",
+                        "location": {
+                          "file": "/mnt/data/work_v104/tests/e2e/public-smoke.spec.ts",
+                          "column": 16,
+                          "line": 31
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 29 |\u001b[39m     page\u001b[33m.\u001b[39mon(\u001b[32m'console'\u001b[39m\u001b[33m,\u001b[39m msg \u001b[33m=>\u001b[39m { \u001b[36mif\u001b[39m (msg\u001b[33m.\u001b[39mtype() \u001b[33m===\u001b[39m \u001b[32m'error'\u001b[39m) consoleErrors\u001b[33m.\u001b[39mpush(msg\u001b[33m.\u001b[39mtext())\u001b[33m;\u001b[39m })\u001b[33m;\u001b[39m\n \u001b[90m 30 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39msetViewportSize({ width\u001b[33m:\u001b[39m \u001b[35m390\u001b[39m\u001b[33m,\u001b[39m height\u001b[33m:\u001b[39m \u001b[35m844\u001b[39m })\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 31 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgoto(\u001b[32m'/'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m    |\u001b[39m                \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 32 |\u001b[39m     \u001b[36mawait\u001b[39m expect(page)\u001b[33m.\u001b[39mtoHaveTitle(\u001b[35m/Tactic Boss AI/\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 33 |\u001b[39m     \u001b[36mawait\u001b[39m expect(page\u001b[33m.\u001b[39mgetByText(\u001b[32m'Tactic Boss AI'\u001b[39m)\u001b[33m.\u001b[39mfirst())\u001b[33m.\u001b[39mtoBeVisible()\u001b[33m;\u001b[39m\n \u001b[90m 34 |\u001b[39m     \u001b[36mawait\u001b[39m expect(page\u001b[33m.\u001b[39mlocator(\u001b[32m'input[type=\"email\"]'\u001b[39m))\u001b[33m.\u001b[39mtoBeVisible()\u001b[33m;\u001b[39m\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "/mnt/data/work_v104/tests/e2e/public-smoke.spec.ts",
+                            "column": 16,
+                            "line": 31
+                          },
+                          "message": "Error: page.goto: net::ERR_BLOCKED_BY_ADMINISTRATOR at http://127.0.0.1:4173/\nCall log:\n\u001b[2m  - navigating to \"http://127.0.0.1:4173/\", waiting until \"load\"\u001b[22m\n\n\n  29 |     page.on('console', msg => { if (msg.type() === 'error') consoleErrors.push(msg.text()); });\n  30 |     await page.setViewportSize({ width: 390, height: 844 });\n> 31 |     await page.goto('/');\n     |                ^\n  32 |     await expect(page).toHaveTitle(/Tactic Boss AI/);\n  33 |     await expect(page.getByText('Tactic Boss AI').first()).toBeVisible();\n  34 |     await expect(page.locator('input[type=\"email\"]')).toBeVisible();\n    at /mnt/data/work_v104/tests/e2e/public-smoke.spec.ts:31:16"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-06-11T16:25:44.931Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "/mnt/data/work_v104/test-results/public-smoke-public-produc-dc2c7--and-guest-access-is-absent/error-context.md"
+                        },
+                        {
+                          "name": "trace",
+                          "contentType": "application/zip",
+                          "path": "/mnt/data/work_v104/test-results/public-smoke-public-produc-dc2c7--and-guest-access-is-absent/trace.zip"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "/mnt/data/work_v104/tests/e2e/public-smoke.spec.ts",
+                        "column": 16,
+                        "line": 31
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "9069cf5df66af74e1237-ea169050a8d890364d29",
+              "file": "public-smoke.spec.ts",
+              "line": 27,
+              "column": 3
+            },
+            {
+              "title": "signup requires password confirmation",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 1,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 603,
+                      "error": {
+                        "message": "Error: page.goto: net::ERR_BLOCKED_BY_ADMINISTRATOR at http://127.0.0.1:4173/\nCall log:\n\u001b[2m  - navigating to \"http://127.0.0.1:4173/\", waiting until \"load\"\u001b[22m\n",
+                        "stack": "Error: page.goto: net::ERR_BLOCKED_BY_ADMINISTRATOR at http://127.0.0.1:4173/\nCall log:\n\u001b[2m  - navigating to \"http://127.0.0.1:4173/\", waiting until \"load\"\u001b[22m\n\n    at /mnt/data/work_v104/tests/e2e/public-smoke.spec.ts:42:16",
+                        "location": {
+                          "file": "/mnt/data/work_v104/tests/e2e/public-smoke.spec.ts",
+                          "column": 16,
+                          "line": 42
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 40 |\u001b[39m\n \u001b[90m 41 |\u001b[39m   test(\u001b[32m'signup requires password confirmation'\u001b[39m\u001b[33m,\u001b[39m \u001b[36masync\u001b[39m ({ page }) \u001b[33m=>\u001b[39m {\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 42 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgoto(\u001b[32m'/'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m    |\u001b[39m                \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 43 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgetByRole(\u001b[32m'button'\u001b[39m\u001b[33m,\u001b[39m { name\u001b[33m:\u001b[39m \u001b[35m/إنشاء حساب|Create Account/i\u001b[39m })\u001b[33m.\u001b[39mclick()\u001b[33m;\u001b[39m\n \u001b[90m 44 |\u001b[39m     \u001b[36mawait\u001b[39m expect(page\u001b[33m.\u001b[39mgetByText(\u001b[35m/تأكيد كلمة المرور|Confirm Password/i\u001b[39m))\u001b[33m.\u001b[39mtoBeVisible()\u001b[33m;\u001b[39m\n \u001b[90m 45 |\u001b[39m     \u001b[36mawait\u001b[39m expect(page\u001b[33m.\u001b[39mlocator(\u001b[32m'input[autocomplete=\"new-password\"]'\u001b[39m))\u001b[33m.\u001b[39mtoHaveCount(\u001b[35m2\u001b[39m)\u001b[33m;\u001b[39m\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "/mnt/data/work_v104/tests/e2e/public-smoke.spec.ts",
+                            "column": 16,
+                            "line": 42
+                          },
+                          "message": "Error: page.goto: net::ERR_BLOCKED_BY_ADMINISTRATOR at http://127.0.0.1:4173/\nCall log:\n\u001b[2m  - navigating to \"http://127.0.0.1:4173/\", waiting until \"load\"\u001b[22m\n\n\n  40 |\n  41 |   test('signup requires password confirmation', async ({ page }) => {\n> 42 |     await page.goto('/');\n     |                ^\n  43 |     await page.getByRole('button', { name: /إنشاء حساب|Create Account/i }).click();\n  44 |     await expect(page.getByText(/تأكيد كلمة المرور|Confirm Password/i)).toBeVisible();\n  45 |     await expect(page.locator('input[autocomplete=\"new-password\"]')).toHaveCount(2);\n    at /mnt/data/work_v104/tests/e2e/public-smoke.spec.ts:42:16"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-06-11T16:25:46.821Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "/mnt/data/work_v104/test-results/public-smoke-public-produc-7e3a8-uires-password-confirmation/error-context.md"
+                        },
+                        {
+                          "name": "trace",
+                          "contentType": "application/zip",
+                          "path": "/mnt/data/work_v104/test-results/public-smoke-public-produc-7e3a8-uires-password-confirmation/trace.zip"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "/mnt/data/work_v104/tests/e2e/public-smoke.spec.ts",
+                        "column": 16,
+                        "line": 42
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "9069cf5df66af74e1237-28b863b8c7699b0678e1",
+              "file": "public-smoke.spec.ts",
+              "line": 41,
+              "column": 3
+            },
+            {
+              "title": "policy and deletion files are present and valid",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 2,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 306,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-06-11T16:25:48.852Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "9069cf5df66af74e1237-8f682cad3e0829f7e079",
+              "file": "public-smoke.spec.ts",
+              "line": 48,
+              "column": 3
+            },
+            {
+              "title": "desktop login layout has no horizontal overflow",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 2,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 473,
+                      "error": {
+                        "message": "Error: page.goto: net::ERR_BLOCKED_BY_ADMINISTRATOR at http://127.0.0.1:4173/\nCall log:\n\u001b[2m  - navigating to \"http://127.0.0.1:4173/\", waiting until \"load\"\u001b[22m\n",
+                        "stack": "Error: page.goto: net::ERR_BLOCKED_BY_ADMINISTRATOR at http://127.0.0.1:4173/\nCall log:\n\u001b[2m  - navigating to \"http://127.0.0.1:4173/\", waiting until \"load\"\u001b[22m\n\n    at /mnt/data/work_v104/tests/e2e/public-smoke.spec.ts:60:16",
+                        "location": {
+                          "file": "/mnt/data/work_v104/tests/e2e/public-smoke.spec.ts",
+                          "column": 16,
+                          "line": 60
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 58 |\u001b[39m   test(\u001b[32m'desktop login layout has no horizontal overflow'\u001b[39m\u001b[33m,\u001b[39m \u001b[36masync\u001b[39m ({ page }) \u001b[33m=>\u001b[39m {\n \u001b[90m 59 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39msetViewportSize({ width\u001b[33m:\u001b[39m \u001b[35m1440\u001b[39m\u001b[33m,\u001b[39m height\u001b[33m:\u001b[39m \u001b[35m900\u001b[39m })\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 60 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgoto(\u001b[32m'/'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m    |\u001b[39m                \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 61 |\u001b[39m     \u001b[36mconst\u001b[39m overflow \u001b[33m=\u001b[39m \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mevaluate(() \u001b[33m=>\u001b[39m document\u001b[33m.\u001b[39mdocumentElement\u001b[33m.\u001b[39mscrollWidth \u001b[33m>\u001b[39m document\u001b[33m.\u001b[39mdocumentElement\u001b[33m.\u001b[39mclientWidth)\u001b[33m;\u001b[39m\n \u001b[90m 62 |\u001b[39m     expect(overflow)\u001b[33m.\u001b[39mtoBeFalsy()\u001b[33m;\u001b[39m\n \u001b[90m 63 |\u001b[39m   })\u001b[33m;\u001b[39m\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "/mnt/data/work_v104/tests/e2e/public-smoke.spec.ts",
+                            "column": 16,
+                            "line": 60
+                          },
+                          "message": "Error: page.goto: net::ERR_BLOCKED_BY_ADMINISTRATOR at http://127.0.0.1:4173/\nCall log:\n\u001b[2m  - navigating to \"http://127.0.0.1:4173/\", waiting until \"load\"\u001b[22m\n\n\n  58 |   test('desktop login layout has no horizontal overflow', async ({ page }) => {\n  59 |     await page.setViewportSize({ width: 1440, height: 900 });\n> 60 |     await page.goto('/');\n     |                ^\n  61 |     const overflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth);\n  62 |     expect(overflow).toBeFalsy();\n  63 |   });\n    at /mnt/data/work_v104/tests/e2e/public-smoke.spec.ts:60:16"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-06-11T16:25:49.787Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "/mnt/data/work_v104/test-results/public-smoke-public-produc-781f5--has-no-horizontal-overflow/error-context.md"
+                        },
+                        {
+                          "name": "trace",
+                          "contentType": "application/zip",
+                          "path": "/mnt/data/work_v104/test-results/public-smoke-public-produc-781f5--has-no-horizontal-overflow/trace.zip"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "/mnt/data/work_v104/tests/e2e/public-smoke.spec.ts",
+                        "column": 16,
+                        "line": 60
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "9069cf5df66af74e1237-086fd19a0728fb40035b",
+              "file": "public-smoke.spec.ts",
+              "line": 58,
+              "column": 3
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2026-06-11T16:25:44.259Z",
+    "duration": 6151.481,
+    "expected": 1,
+    "skipped": 0,
+    "unexpected": 3,
+    "flaky": 0
+  }
+}

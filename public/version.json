@@ -1,0 +1,6 @@
+{
+  "version": "v105.4-github-netlify-vite-hard-lock",
+  "build": "github-netlify-guaranteed-build-vite-in-dependencies-cache-repair",
+  "requiresClearCache": true,
+  "notes": "V105.4 hardens GitHub to Netlify builds: Vite/build tools are production-safe dependencies and the Netlify build command repairs missing/corrupt node_modules before building."
+}

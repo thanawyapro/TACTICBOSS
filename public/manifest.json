@@ -1,0 +1,39 @@
+{
+  "name": "Tactic Boss AI",
+  "short_name": "Tactic Boss",
+  "description": "Football tactics command center with locked AI plans, tactical board, share cards and cloud sync.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#070b13",
+  "theme_color": "#070b13",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/assets/icon-192.png?v=105",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/assets/icon-512.png?v=105",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": [
+    "sports",
+    "games",
+    "utilities"
+  ],
+  "id": "/",
+  "lang": "ar",
+  "dir": "rtl",
+  "display_override": [
+    "window-controls-overlay",
+    "standalone",
+    "minimal-ui"
+  ],
+  "prefer_related_applications": false
+}
