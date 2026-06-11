@@ -1,7 +1,7 @@
 {
   "name": "tactic-boss-ai",
   "private": true,
-  "version": "1.12.0",
+  "version": "1.13.3",
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
@@ -26,7 +26,7 @@
     "check:web-launch": "node scripts/web-launch-readiness.mjs",
     "build:web-launch": "vite build",
     "build:web": "vite build",
-    "build:netlify": "vite build"
+    "build:netlify": "bash scripts/netlify-build.sh"
   },
   "dependencies": {
     "@capacitor/android": "^8.4.0",
@@ -38,10 +38,12 @@
     "lucide-react": "^0.546.0",
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
+    "typescript": "~5.8.2",
     "vite": "^6.2.3"
   },
   "devDependencies": {
     "@playwright/test": "^1.60.0",
+    "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@types/node": "^22.14.0",
@@ -54,5 +56,10 @@
     "vite": "^6.2.3",
     "vitest": "^4.1.8"
   },
-  "description": "Football tactics platform with Community Lite, referrals, eFootball manager simulation, auto tactical board and AI coaching."
+  "description": "Football tactics platform with Community Lite, referrals, eFootball manager simulation, auto tactical board and AI coaching.",
+  "engines": {
+    "node": "20.x",
+    "npm": "10.x"
+  },
+  "packageManager": "npm@10.8.2"
 }

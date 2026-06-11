@@ -13,6 +13,17 @@ export interface TacticResult {
   difficulty: string;
   confidence: string;
   boardAnalysis?: string[];
+
+  // V101 Final Plan Lock: one immutable source of truth for result, board, card and saved tactic.
+  finalPlanLocked?: boolean;
+  finalPlanVersion?: string;
+  finalPlanId?: string;
+  finalPlanSourceTool?: string;
+  finalPlanGame?: string;
+  finalPlanLanguage?: string;
+  finalBoard?: TacticalBoardState | null;
+  score?: number;
+  rating?: number;
 }
 
 export interface TacticalPlayer {

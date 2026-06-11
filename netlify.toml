@@ -1,12 +1,19 @@
 [build]
-  publish = "."
+  command = "npm run build"
+  publish = "dist"
 
 [functions]
   directory = "netlify/functions"
 
 [build.environment]
+  NODE_VERSION = "20.19.0"
+  NPM_VERSION = "10.8.2"
+  NPM_CONFIG_PRODUCTION = "false"
+  NPM_CONFIG_INCLUDE = "dev"
+  NPM_CONFIG_AUDIT = "false"
+  NPM_CONFIG_FUND = "false"
   SECRETS_SCAN_OMIT_KEYS = "SUPABASE_URL,SUPABASE_ANON_KEY,OAUTH_REDIRECT_URL"
-  SECRETS_SCAN_OMIT_PATHS = "runtime-config.js,READ_ME_FIRST.txt"
+  SECRETS_SCAN_OMIT_PATHS = "dist/runtime-config.js,public/runtime-config.js,READ_ME_FIRST_GITHUB_DEPLOY_AR.md"
 
 [[redirects]]
   from = "/api/vision-analysis"

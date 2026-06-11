@@ -22,6 +22,7 @@ import {
   Star,
   Flame,
   Award,
+  Trophy,
   Dribbble,
   Languages,
   Brain,
@@ -116,6 +117,38 @@ import {
   sanitizeUserText,
   moderationMessage,
 } from "./utils/contentModeration";
+import {
+  FINAL_PLAN_VERSION,
+  cloneBoardState,
+  lockFinalPlanResult,
+  safePercent,
+  safeScore10,
+} from "./utils/finalPlan";
+import {
+  AiUsageKind,
+  CoachCompetitionState,
+  CompetitionEventType,
+  awardLocalCompetition,
+  badgeLabel,
+  canUseLocalAi,
+  coachRankTitle,
+  consumeLocalAi,
+  defaultCompetitionState,
+  localLeaderboard,
+  normalizeCompetitionState,
+} from "./utils/competitionEngine";
+import {
+  FEATURE_UNLOCKS,
+  FeatureUnlockId,
+  canUseFeature,
+  featureUnlock,
+  featureUnlockMessage,
+  lockedFeatures,
+  nextFeatureUnlock,
+  progressionSyncPayload,
+  tacticalLevelFromXp,
+  unlockedFeatures,
+} from "./utils/progressionUnlocks";
 
 const DEFAULT_SUBSCRIPTION: UserSubscription = {
   plan: "free",
@@ -190,7 +223,9 @@ export default function App() {
   const [showInstructionDetails, setShowInstructionDetails] = useState(false);
   const [showDefenceDetails, setShowDefenceDetails] = useState(false);
   const [showAttackDetails, setShowAttackDetails] = useState(false);
-  const [showOpponentOnBoard, setShowOpponentOnBoard] = useState(true);
+  const [showOpponentOnBoard, setShowOpponentOnBoard] = useState(false);
+  const [showExecutionBoard, setShowExecutionBoard] = useState(false);
+  const [showBoardScan, setShowBoardScan] = useState(false);
   const [analyzeMode, setAnalyzeMode] = useState<"match" | "screenshot">(
     "match",
   );
@@ -210,6 +245,12 @@ export default function App() {
   const [rewardWallet, setRewardWallet] = useState<RewardWallet>(() =>
     defaultRewardWallet(),
   );
+  const [competition, setCompetition] = useState<CoachCompetitionState>(() =>
+    defaultCompetitionState(),
+  );
+  const [cloudCoachLeague, setCloudCoachLeague] = useState<
+    Array<{ name: string; points: number; badge: string; isCurrentUser?: boolean }>
+  >([]);
   const [cloudMeta, setCloudMeta] = useState<MetaItem[]>([]);
   const [screenshotAnalyses, setScreenshotAnalyses] = useState<
     ScreenshotAnalysisResult[]
@@ -413,6 +454,11 @@ export default function App() {
   const todayPlan = dailyTeamPlan(homeGameId);
   const currentChallenges = dailyChallenges(lang);
   const currentLevel = levelInfo(progression.xp, lang);
+  const tacticalLevel = tacticalLevelFromXp(progression.xp);
+  const unlockedProgressionFeatures = unlockedFeatures(progression.xp);
+  const lockedProgressionFeatures = lockedFeatures(progression.xp);
+  const nextProgressionUnlock = nextFeatureUnlock(progression.xp);
+  const canUseProgressionFeature = (id: FeatureUnlockId) => canUseFeature(progression.xp, id);
   const currentMeta = cloudMeta.length
     ? cloudMeta
     : buildMetaCenter(homeGameId, savedTactics);
@@ -490,7 +536,15 @@ export default function App() {
     setSearchGameQuery("");
     setShowInstructionDetails(false);
     setShowAdvancedPlan(false);
-    setShowOpponentOnBoard(true);
+    setCoachQuestion("");
+    setCoachTips([]);
+    setCoachConflicts([]);
+    setCoachQuickActions([]);
+    setSelectedGuidedCardId("best");
+    setLiveRescueScenario("");
+    setShowOpponentOnBoard(false);
+    setShowExecutionBoard(false);
+    setShowBoardScan(false);
   };
 
   const startBuildMyTactic = () => {
@@ -559,6 +613,27 @@ export default function App() {
     setScreen("select-game");
   };
 
+  const startLiveRescue = () => {
+    resetToolWorkspace();
+    setGeneratorMode("counter");
+    setSelectedGame(null);
+    const rescue = uiText("أنا متأخر 1-0", "I am losing 1-0", "Voy perdiendo 1-0", "Je perds 1-0");
+    setLiveRescueScenario(rescue);
+    setFormData({
+      myFormation: "4-2-3-1",
+      oppFormation: "4-2-3-1",
+      opponentStyle: uiText("الخصم متقدم وقافل المساحات", "The rival is leading and closing spaces", "Rival cerrado", "Adversaire fermé"),
+      myStyle: "Quick Counter",
+      matchState: rescue,
+      myTeam: "",
+      oppTeam: "",
+      notes: `LIVE_RESCUE:${rescue} | AI_COUNTER:live`,
+      efootballManagerId: "guardiola-possession",
+    });
+    setStep(1);
+    setScreen("select-game");
+  };
+
   const startAnalyzeMyMatch = () => {
     resetToolWorkspace();
     setAnalyzeMode("match");
@@ -609,7 +684,11 @@ export default function App() {
   const [currentResult, setCurrentResult] = useState<TacticResult | null>(null);
   const [coachQuestion, setCoachQuestion] = useState("");
   const [coachTips, setCoachTips] = useState<string[]>([]);
+  const [coachConflicts, setCoachConflicts] = useState<string[]>([]);
+  const [coachQuickActions, setCoachQuickActions] = useState<string[]>([]);
   const [coachTipsLoading, setCoachTipsLoading] = useState(false);
+  const [selectedGuidedCardId, setSelectedGuidedCardId] = useState<string>("best");
+  const [liveRescueScenario, setLiveRescueScenario] = useState<string>("");
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [shareSuccess, setShareSuccess] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -627,6 +706,34 @@ export default function App() {
     55,
     Math.min(98, 95 - resultWarningCount * 9 + (formData.myTeam ? 2 : 0)),
   );
+
+  const getLockedBoardState = (result = currentResult, fallback = boardState) =>
+    cloneBoardState(fallback || result?.finalBoard);
+
+  const lockExistingResult = (
+    result: TacticResult,
+    board: TacticalBoardState | null | undefined = boardState,
+    sourceTool = generatorMode,
+  ) =>
+    lockFinalPlanResult(result, board, {
+      sourceTool,
+      game: selectedGame?.id || homeGameId,
+      language: lang,
+      formation: result.formation || formData.myFormation,
+      playstyle: result.attackingStyle || formData.myStyle,
+      confidenceFallback: resultTacticalScore,
+    });
+
+  const openLockedResult = (
+    result: TacticResult,
+    board: TacticalBoardState | null | undefined,
+    sourceTool = generatorMode,
+  ) => {
+    const locked = lockExistingResult(result, board, sourceTool);
+    setCurrentResult(locked.result);
+    setBoardState(locked.board);
+    return locked;
+  };
 
   const cleanTacticText = (value: string) => {
     const raw = translateTacticText(String(value || ""), lang);
@@ -1330,6 +1437,296 @@ export default function App() {
     return uniqueShapes(generic[style] || generic["Quick Counter"]).slice(0, 8);
   };
 
+
+  type GuidedRecommendation = {
+    id: string;
+    title: string;
+    badge: string;
+    formation: string;
+    style: string;
+    reason: string;
+    matchState: string;
+    notes: string;
+    risk: "best" | "safe" | "creative" | "aggressive";
+  };
+
+  const guidedBuildIntents = () => [
+    {
+      id: "best",
+      title: uiText("اختارلي الأفضل", "Pick the best for me", "Elige lo mejor", "Choisir le meilleur"),
+      desc: uiText("الـ AI يختار أسلوب وتشكيلات مناسبة بدل الاختيار اليدوي.", "AI selects the style and shapes instead of manual picking.", "IA elige.", "L’IA choisit."),
+      style: "Quick Counter",
+    },
+    {
+      id: "control",
+      title: uiText("أريد سيطرة وبناء هادئ", "I want control and calm buildup", "Quiero control", "Je veux le contrôle"),
+      desc: uiText("استحواذ، تمرير قصير، مسافات قريبة.", "Possession, short passing, close support.", "Posesión.", "Possession."),
+      style: "Possession Game",
+    },
+    {
+      id: "speed",
+      title: uiText("أريد سرعة ومرتدات", "I want speed and counters", "Velocidad y contras", "Vitesse et contres"),
+      desc: uiText("تحولات عمودية وخطة مباشرة.", "Vertical transitions and a direct plan.", "Transiciones.", "Transitions."),
+      style: "Quick Counter",
+    },
+    {
+      id: "press",
+      title: uiText("أريد ضغط عالي", "I want high press", "Presión alta", "Pressing haut"),
+      desc: uiText("استرجاع سريع، خط دفاع أعلى، ضغط بعد الفقد.", "Fast regain, higher line, pressure after loss.", "Presión.", "Pressing."),
+      style: "Quick Counter",
+    },
+    {
+      id: "safe",
+      title: uiText("أريد أمان دفاعي", "I want defensive safety", "Seguridad defensiva", "Sécurité défensive"),
+      desc: uiText("خط أهدأ، تكتل أعلى، مخاطرة أقل.", "Calmer line, higher compactness, lower risk.", "Seguro.", "Sûr."),
+      style: "Long Ball Counter",
+    },
+  ];
+
+  const counterProblemOptions = () => [
+    { id: "wide", label: uiText("سريع من الأطراف", "Fast on the wings", "Rápido por bandas", "Rapide sur les ailes"), text: uiText("الخصم سريع من الأطراف وبيضربني بالعرضيات", "The rival is fast wide and hurts me with crosses", "Rival rápido por bandas", "Adversaire rapide sur les ailes") },
+    { id: "press", label: uiText("ضغط عالي", "High press", "Presión alta", "Pressing haut"), text: uiText("الخصم بيضغط عليا من أول الملعب", "The rival presses me from the first third", "Presión alta", "Pressing haut") },
+    { id: "possession", label: uiText("استحواذ خانق", "Heavy possession", "Posesión dominante", "Possession étouffante"), text: uiText("الخصم مستحوذ ومش عارف أقطع الكرة", "The rival dominates possession and I cannot win the ball", "Posesión", "Possession") },
+    { id: "long", label: uiText("كرات طويلة", "Long balls", "Balones largos", "Longs ballons"), text: uiText("الخصم بيلعب كرات طويلة خلف الدفاع", "The rival plays long balls behind my line", "Balones largos", "Longs ballons") },
+    { id: "amf", label: uiText("AMF مزعج", "Annoying AMF", "MCO molesto", "MO dangereux"), text: uiText("عنده صانع لعب AMF بين الخطوط مسبب مشكلة", "Their AMF between the lines is causing problems", "MCO peligroso", "MO dangereux") },
+    { id: "low", label: uiText("دفاع متأخر", "Low block", "Bloque bajo", "Bloc bas"), text: uiText("الخصم قافل دفاع ومش بعرف أوصل للمرمى", "The rival sits deep and I cannot reach goal", "Bloque bajo", "Bloc bas") },
+  ];
+
+  const liveRescueOptions = () => [
+    uiText("أنا متأخر 1-0", "I am losing 1-0", "Voy perdiendo 1-0", "Je perds 1-0"),
+    uiText("الخصم قافل دفاع", "The rival is parking the bus", "Rival encerrado", "Adversaire bas"),
+    uiText("الخصم بيضغط جامد", "The rival is pressing hard", "Presión fuerte", "Pressing fort"),
+    uiText("الجناح مدمّرني", "Their winger is destroying me", "Su extremo me gana", "Son ailier me détruit"),
+    uiText("الوسط واقع", "I am losing midfield", "Pierdo el medio", "Je perds le milieu"),
+  ];
+
+  const normalizeGuidedIntent = (text = "") => {
+    const v = text.toLowerCase();
+    if (/control|possession|استحواذ|سيطرة|هادئ/.test(v)) return "control";
+    if (/press|ضغط/.test(v)) return "press";
+    if (/safe|defensive|أمان|دفاع/.test(v)) return "safe";
+    if (/wide|wing|طرف|جناح|عرض/.test(v)) return "wide";
+    if (/long|طويل/.test(v)) return "long";
+    if (/low|قافل|متأخر/.test(v)) return "low";
+    if (/amf|صانع|playmaker/.test(v)) return "amf";
+    if (/speed|counter|مرتد|سرعة/.test(v)) return "speed";
+    return "best";
+  };
+
+
+  // V98: stable intent extraction. Selection variants (SAFE/CREATIVE/etc.) must never
+  // recalculate the recommendation list or change the chosen tactic behind the user.
+  const getStableGuidedIntent = (mode: "build" | "counter") => {
+    const notes = String(formData.notes || "");
+    const buildMatch = notes.match(/AI_BUILD:([a-z0-9_-]+)/i);
+    const counterMatch = notes.match(/AI_COUNTER:([a-z0-9_-]+)/i);
+    if (mode === "build" && buildMatch?.[1]) return buildMatch[1].toLowerCase();
+    if (mode === "counter" && counterMatch?.[1]) return counterMatch[1].toLowerCase();
+    return normalizeGuidedIntent(`${notes} ${formData.opponentStyle || ""} ${formData.matchState || ""}`);
+  };
+
+  const stripGuidedRuntimeTags = (value = "") =>
+    String(value || "")
+      .replace(/\|\s*VARIANT:[^|]+/gi, "")
+      .replace(/\|\s*RISK:[^|]+/gi, "")
+      .replace(/\|\s*SEED:[^|]+/gi, "")
+      .replace(/\|\s*AI_FIRST_ENGINE:[^|]+/gi, "")
+      .trim();
+
+  const styleForIntent = (intent: string) => {
+    if (intent === "control") return "Possession Game";
+    if (intent === "safe" || intent === "long") return "Long Ball Counter";
+    if (intent === "wide") return "Out Wide";
+    if (intent === "low") return "Possession Game";
+    return "Quick Counter";
+  };
+
+  const planSeed = (value: string) =>
+    Array.from(value || "").reduce((sum, char) => sum + char.charCodeAt(0), 0);
+
+  const pickBySeed = <T,>(rows: T[], seed: number, offset = 0): T =>
+    rows[Math.abs(seed + offset) % rows.length];
+
+  const makeGuidedRecommendations = (mode: "build" | "counter"): GuidedRecommendation[] => {
+    const stableNotes = stripGuidedRuntimeTags(formData.notes || "");
+    const seedText = `${stableNotes} ${formData.opponentStyle} ${formData.matchState} ${formData.myTeam} ${formData.oppTeam}`;
+    const intent = getStableGuidedIntent(mode);
+    const seed = planSeed(`${mode}-${selectedGame?.id || homeGameId}-${seedText}`);
+    const gameId = selectedGame?.id || homeGameId;
+    const isFc = /fc|fifa/.test(gameId);
+    const isPes = /pes/.test(gameId);
+    const baseStyle = styleForIntent(intent);
+    const efStyle = normalizeEfootballPlaystyle(baseStyle) as any;
+    const manager = isEfootballGame(gameId)
+      ? efootballManagers.find((m) => m.primaryPlaystyle === efStyle || m.secondaryPlaystyles.includes(efStyle as any)) || efootballManagers[0]
+      : null;
+
+    const buildMatrix: Record<string, Array<{ formation: string; style: string; safe: string; creative: string }>> = {
+      best: [
+        { formation: "4-2-3-1", style: "Quick Counter", safe: "4-3-3", creative: "3-2-4-1" },
+        { formation: "4-2-1-3", style: "Quick Counter", safe: "4-2-3-1", creative: "3-4-2-1" },
+        { formation: "4-3-3", style: "Possession Game", safe: "4-2-3-1", creative: "3-2-4-1" },
+      ],
+      control: [
+        { formation: "4-3-3", style: "Possession Game", safe: "4-2-3-1", creative: "3-2-4-1" },
+        { formation: "4-2-3-1", style: "Possession Game", safe: "4-1-4-1", creative: "3-4-2-1" },
+        { formation: "4-3-2-1", style: "Possession Game", safe: "4-3-3", creative: "3-2-4-1" },
+      ],
+      speed: [
+        { formation: "4-2-1-3", style: "Quick Counter", safe: "4-2-3-1", creative: "4-2-4" },
+        { formation: "4-3-3", style: "Quick Counter", safe: "4-4-2", creative: "3-4-2-1" },
+        { formation: "4-2-2-2", style: "Quick Counter", safe: "4-2-3-1", creative: "3-2-4-1" },
+      ],
+      press: [
+        { formation: "4-2-3-1", style: "Quick Counter", safe: "4-4-2", creative: "4-2-4" },
+        { formation: "4-3-3", style: "Quick Counter", safe: "4-2-3-1", creative: "3-4-3" },
+        { formation: "4-2-1-3", style: "Quick Counter", safe: "4-2-3-1", creative: "3-2-4-1" },
+      ],
+      safe: [
+        { formation: "4-2-3-1", style: "Long Ball Counter", safe: "5-3-2", creative: "3-5-2" },
+        { formation: "4-4-2", style: "Long Ball Counter", safe: "5-4-1", creative: "5-2-1-2" },
+        { formation: "4-1-4-1", style: "Long Ball Counter", safe: "5-3-2", creative: "3-4-2-1" },
+      ],
+      wide: [
+        { formation: "4-2-3-1", style: "Out Wide", safe: "4-4-2", creative: "3-4-3" },
+        { formation: "4-3-3", style: "Out Wide", safe: "4-2-3-1", creative: "3-4-2-1" },
+        { formation: "3-4-3", style: "Out Wide", safe: "5-4-1", creative: "3-2-4-1" },
+      ],
+      long: [
+        { formation: "4-2-3-1", style: "Long Ball Counter", safe: "5-3-2", creative: "4-2-2-2" },
+        { formation: "4-4-2", style: "Long Ball Counter", safe: "5-4-1", creative: "3-5-2" },
+        { formation: "5-2-1-2", style: "Long Ball Counter", safe: "5-3-2", creative: "4-2-4" },
+      ],
+      low: [
+        { formation: "4-2-3-1", style: "Possession Game", safe: "4-3-3", creative: "3-2-4-1" },
+        { formation: "4-3-3", style: "Out Wide", safe: "4-2-3-1", creative: "3-4-3" },
+        { formation: "4-2-4", style: "Quick Counter", safe: "4-3-3", creative: "3-2-4-1" },
+      ],
+      amf: [
+        { formation: "4-2-3-1", style: "Quick Counter", safe: "4-1-4-1", creative: "4-3-1-2" },
+        { formation: "4-3-3", style: "Possession Game", safe: "4-2-3-1", creative: "3-4-2-1" },
+        { formation: "4-4-2", style: "Long Ball Counter", safe: "5-3-2", creative: "4-2-2-2" },
+      ],
+    };
+    const counterMatrix: Record<string, Array<{ best: string; safe: string; aggressive: string; style: string; safeStyle: string; aggressiveStyle: string }>> = {
+      wide: [
+        { best: "4-4-2", safe: "4-2-3-1", aggressive: "3-4-3", style: "Long Ball Counter", safeStyle: "Long Ball Counter", aggressiveStyle: "Out Wide" },
+        { best: "4-2-3-1", safe: "5-4-1", aggressive: "4-2-1-3", style: "Quick Counter", safeStyle: "Long Ball Counter", aggressiveStyle: "Quick Counter" },
+      ],
+      press: [
+        { best: "4-2-3-1", safe: "4-4-2", aggressive: "4-2-1-3", style: "Possession Game", safeStyle: "Long Ball Counter", aggressiveStyle: "Quick Counter" },
+        { best: "4-3-3", safe: "4-2-3-1", aggressive: "3-2-4-1", style: "Possession Game", safeStyle: "Long Ball Counter", aggressiveStyle: "Quick Counter" },
+      ],
+      possession: [
+        { best: "4-2-3-1", safe: "4-4-2", aggressive: "4-2-1-3", style: "Quick Counter", safeStyle: "Long Ball Counter", aggressiveStyle: "Quick Counter" },
+        { best: "4-3-2-1", safe: "4-2-3-1", aggressive: "3-4-2-1", style: "Quick Counter", safeStyle: "Long Ball Counter", aggressiveStyle: "Out Wide" },
+      ],
+      long: [
+        { best: "5-3-2", safe: "5-4-1", aggressive: "4-4-2", style: "Long Ball Counter", safeStyle: "Long Ball Counter", aggressiveStyle: "Quick Counter" },
+        { best: "4-2-3-1", safe: "5-3-2", aggressive: "4-2-2-2", style: "Long Ball Counter", safeStyle: "Long Ball Counter", aggressiveStyle: "Quick Counter" },
+      ],
+      amf: [
+        { best: "4-2-3-1", safe: "4-1-4-1", aggressive: "4-3-1-2", style: "Quick Counter", safeStyle: "Long Ball Counter", aggressiveStyle: "Possession Game" },
+        { best: "4-3-3", safe: "4-2-3-1", aggressive: "3-4-2-1", style: "Possession Game", safeStyle: "Long Ball Counter", aggressiveStyle: "Quick Counter" },
+      ],
+      low: [
+        { best: "3-2-4-1", safe: "4-3-3", aggressive: "4-2-4", style: "Possession Game", safeStyle: "Possession Game", aggressiveStyle: "Quick Counter" },
+        { best: "4-3-3", safe: "4-2-3-1", aggressive: "3-4-3", style: "Out Wide", safeStyle: "Possession Game", aggressiveStyle: "Out Wide" },
+      ],
+      best: [
+        { best: "4-2-3-1", safe: "4-4-2", aggressive: "4-2-1-3", style: "Quick Counter", safeStyle: "Long Ball Counter", aggressiveStyle: "Quick Counter" },
+        { best: "4-3-3", safe: "4-2-3-1", aggressive: "3-2-4-1", style: "Possession Game", safeStyle: "Long Ball Counter", aggressiveStyle: "Quick Counter" },
+      ],
+      speed: [
+        { best: "4-2-3-1", safe: "5-3-2", aggressive: "4-2-1-3", style: "Long Ball Counter", safeStyle: "Long Ball Counter", aggressiveStyle: "Quick Counter" },
+      ],
+      safe: [
+        { best: "4-2-3-1", safe: "5-3-2", aggressive: "4-4-2", style: "Long Ball Counter", safeStyle: "Long Ball Counter", aggressiveStyle: "Quick Counter" },
+      ],
+      control: [
+        { best: "4-2-3-1", safe: "4-4-2", aggressive: "4-2-1-3", style: "Quick Counter", safeStyle: "Long Ball Counter", aggressiveStyle: "Quick Counter" },
+      ],
+    };
+    const key = counterMatrix[intent] ? intent : "best";
+    const buildRow = pickBySeed(buildMatrix[intent] || buildMatrix.best, seed);
+    const counterRow = pickBySeed(counterMatrix[key], seed);
+    const selectedManagerFormation = (shape: string, _style: string) => {
+      // V98: never replace a recommendation formation with manager default.
+      // The exact visible card must be the exact final plan.
+      return shape;
+    };
+    const prefix = mode === "counter" ? "AI_COUNTER_RESCUE" : "AI_BUILD_CORE";
+    const noteBase = mode === "counter"
+      ? `${prefix}:${intent} | ${formData.notes || formData.opponentStyle || formData.matchState || "opponent problem"}`
+      : `${prefix}:${intent} | ${formData.notes || "player goal"}`;
+    const firstFormation = mode === "counter" ? counterRow.best : selectedManagerFormation(buildRow.formation, buildRow.style);
+    const secondFormation = mode === "counter" ? counterRow.safe : selectedManagerFormation(buildRow.safe, mode === "build" && intent === "control" ? "Possession Game" : "Long Ball Counter");
+    const thirdFormation = mode === "counter" ? counterRow.aggressive : selectedManagerFormation(buildRow.creative, intent === "safe" ? "Long Ball Counter" : intent === "wide" ? "Out Wide" : "Quick Counter");
+    const firstStyle = mode === "counter" ? counterRow.style : buildRow.style;
+    const secondStyle = mode === "counter" ? counterRow.safeStyle : (intent === "control" ? "Possession Game" : "Long Ball Counter");
+    const thirdStyle = mode === "counter" ? counterRow.aggressiveStyle : (intent === "safe" ? "Long Ball Counter" : intent === "wide" ? "Out Wide" : "Quick Counter");
+    const first: GuidedRecommendation = {
+      id: "best",
+      title: uiText("أفضل اختيار", "Best pick", "Mejor opción", "Meilleur choix"),
+      badge: "AI",
+      formation: firstFormation,
+      style: firstStyle,
+      reason: mode === "counter"
+        ? uiText("الخطة المضادة الأقرب لمشكلة الخصم مع توازن بين الأمان والتهديد.", "Best counter for the rival problem while keeping safety and threat.", "Contra equilibrada.", "Contre équilibré.")
+        : uiText("اختيار المدرب الأساسي حسب هدفك، مع قيم متوازنة لا تشبه باقي البدائل.", "Coach’s main pick from your goal, with values that differ from the other options.", "Elección principal.", "Choix principal."),
+      matchState: uiText("اختيار AI — أفضل توازن", "AI pick — best balance", "IA equilibrio", "IA équilibre"),
+      notes: `${noteBase} | VARIANT:BEST | RISK:BALANCED | SEED:${seed % 97}`,
+      risk: "best",
+    };
+    const second: GuidedRecommendation = {
+      id: "safe",
+      title: uiText("اختيار آمن", "Safe choice", "Opción segura", "Choix sûr"),
+      badge: "SAFE",
+      formation: secondFormation,
+      style: secondStyle,
+      reason: uiText("يقلل المساحات خلفك ويجعل أولويتك منع الهدف قبل صناعة الفرصة.", "Reduces space behind you and prioritizes not conceding before chance creation.", "Menos riesgo.", "Moins de risque."),
+      matchState: uiText("اختيار AI — آمن", "AI pick — safe", "IA seguro", "IA sûr"),
+      notes: `${noteBase} | VARIANT:SAFE | RISK:LOW | SEED:${(seed + 23) % 97}`,
+      risk: "safe",
+    };
+    const third: GuidedRecommendation = {
+      id: "creative",
+      title: mode === "counter" ? uiText("اختيار هجومي", "Aggressive choice", "Opción agresiva", "Choix offensif") : uiText("اختيار كرييتڤ", "Creative choice", "Opción creativa", "Choix créatif"),
+      badge: mode === "counter" ? "AGG" : "CREATIVE",
+      formation: thirdFormation,
+      style: thirdStyle,
+      reason: uiText("نسخة لكسر التوقعات ورفع الضغط الهجومي مع مخاطرة أعلى.", "A higher-risk version to break expectations and increase attacking pressure.", "Más agresiva.", "Plus agressif."),
+      matchState: mode === "counter" ? uiText("اختيار AI — هجومي", "AI pick — aggressive", "IA agresivo", "IA offensif") : uiText("اختيار AI — كرييتڤ", "AI pick — creative", "IA creativo", "IA créatif"),
+      notes: `${noteBase} | VARIANT:${mode === "counter" ? "AGGRESSIVE" : "CREATIVE"} | RISK:HIGH | SEED:${(seed + 47) % 97}`,
+      risk: mode === "counter" ? "aggressive" : "creative",
+    };
+    return [first, second, third];
+  };
+
+  const applyGuidedRecommendation = (rec: GuidedRecommendation) => {
+    setSelectedGuidedCardId(rec.id);
+    const manager = isEfootballGame(selectedGame?.id)
+      ? efootballManagers.find((m) => m.primaryPlaystyle === normalizeEfootballPlaystyle(rec.style) || m.secondaryPlaystyles.includes(normalizeEfootballPlaystyle(rec.style) as any)) || efootballManagers[0]
+      : null;
+    const formation = manager?.bestFormations?.includes(rec.formation)
+      ? rec.formation
+      : rec.formation;
+    const next = {
+      ...formData,
+      myFormation: formation,
+      myStyle: isEfootballGame(selectedGame?.id) ? normalizeEfootballPlaystyle(rec.style) : rec.style,
+      efootballManagerId: manager?.id || formData.efootballManagerId,
+      matchState: rec.matchState,
+      notes: rec.notes,
+    };
+    setFormData(next);
+    if (isEfootballGame(selectedGame?.id)) setEfootballPlaystyleFilter(normalizeEfootballPlaystyle(next.myStyle));
+    const nextBoard = manager
+      ? buildEfootballManagerBoard(formation, next.oppFormation, manager)
+      : buildGameAwareBoard(selectedGame?.id, formation, next.oppFormation);
+    if (nextBoard) setBoardState(nextBoard);
+  };
+
   const selectBuildStyleAndAutoShape = (styleValue: string) => {
     if (isEfootballGame(selectedGame?.id)) {
       const efStyle = normalizeEfootballPlaystyle(styleValue);
@@ -1342,7 +1739,7 @@ export default function App() {
       const next = {
         ...formData,
         efootballManagerId: manager.id,
-        myStyle: manager.primaryPlaystyle,
+        myStyle: efStyle,
         myFormation: shape,
       };
       setFormData(next);
@@ -1387,8 +1784,15 @@ export default function App() {
       opponentText,
     );
     const againstLowBlock = /دفاع متأخر|low block|park|خمسة/.test(opponentText);
-    const matchState = `${formData.matchState || ""}`.toLowerCase();
+    const matchState = `${formData.matchState || ""} ${formData.notes || ""}`.toLowerCase();
     const chasing = /متأخر|خسر|trailing|need goal|هدف/.test(matchState);
+    const guidedSafe = /variant:safe|آمن|safe/.test(matchState);
+    const guidedCreative = /variant:creative|creative|كرييت/.test(matchState);
+    const guidedAggressive = /variant:aggressive|aggressive|هجومي/.test(matchState);
+    const guidedBest = /variant:best|أفضل|best/.test(matchState);
+    const rivalWide = /wide|wing|طرف|جناح|عرضيات/.test(matchState);
+    const rivalLong = /long|طويل|كرات طويلة/.test(matchState);
+    const rivalPlaymaker = /amf|صانع|playmaker/.test(matchState);
 
     // V78: values are no longer defaults. They are selected from a formation/style matrix.
     const shapeKey = `${formation || ""}`.replace(/\s+/g, "");
@@ -1418,6 +1822,62 @@ export default function App() {
     else if (isThreeBack) compact = 7;
     else if (againstLowBlock) compact = 6;
     else compact = isPress ? 8 : 7;
+
+    // V88 AI-first variation layer: each recommendation card changes the actual values, not only the label.
+    if (guidedSafe) {
+      support = isLongBall || directStyle ? Math.max(support, 7) : Math.max(support, 5);
+      line = Math.min(line, isThreeBack ? 4 : 4);
+      compact = Math.max(compact, rivalWide ? 8 : 8);
+    }
+    if (guidedCreative) {
+      support = isPossession ? 3 : 4;
+      line = againstFastCounter ? 5 : 6;
+      compact = isWide || rivalWide ? 5 : 6;
+    }
+    if (guidedAggressive || chasing) {
+      support = Math.min(support, 4);
+      line = isThreeBack ? 7 : 7;
+      compact = rivalWide ? 6 : 7;
+    }
+    if (guidedBest && !guidedSafe && !guidedCreative && !guidedAggressive) {
+      if (rivalWide) { line = Math.min(line, 5); compact = Math.max(compact, 8); }
+      if (rivalLong) { line = Math.min(line, 4); compact = Math.max(compact, 8); }
+      if (rivalPlaymaker) { compact = Math.max(compact, 8); support = Math.min(Math.max(support, 4), 6); }
+    }
+
+    // V89 Tactical Intelligence Engine: add scenario-specific value separation so cards never feel copied.
+    const explicitSeed = Number((matchState.match(/seed:(\d+)/i) || [])[1] || 0);
+    const scenarioSeed = explicitSeed || (planSeed(matrixSeed) % 97);
+    const seedBump = scenarioSeed % 3;
+    if (rivalWide) {
+      line = guidedAggressive ? Math.max(line, 6) : Math.min(line, 5);
+      compact = guidedCreative ? Math.max(compact, 6) : Math.max(compact, 8 + (seedBump % 2));
+      support = guidedSafe ? Math.max(support, 6) : Math.max(3, support - 1);
+    } else if (rivalLong) {
+      line = guidedAggressive ? 6 : Math.min(line, 4);
+      compact = Math.max(compact, guidedSafe ? 9 : 8);
+      support = Math.max(support, guidedSafe ? 7 : 6);
+    } else if (againstLowBlock) {
+      line = guidedSafe ? 5 : guidedCreative || guidedAggressive ? 7 : 6;
+      compact = guidedAggressive ? 5 : 6;
+      support = isPossession ? 3 : 4 + seedBump;
+    } else if (rivalPlaymaker) {
+      line = guidedSafe ? Math.min(line, 4) : Math.max(line, 5);
+      compact = Math.max(compact, 8);
+      support = guidedAggressive ? 4 : Math.max(5, support);
+    } else if (isPress) {
+      line = guidedSafe ? 4 : guidedCreative ? 6 : 7;
+      compact = guidedCreative ? 6 : 8;
+      support = guidedSafe ? 6 : 4;
+    }
+    if (guidedCreative && !againstFastCounter) {
+      support = Math.max(2, Math.min(5, support - 1));
+      compact = Math.max(5, compact - 1);
+    }
+    if (guidedSafe) {
+      line = Math.min(line, 4);
+      compact = Math.max(compact, 8);
+    }
     support = Math.max(1, Math.min(10, support));
     line = Math.max(1, Math.min(10, line));
     compact = Math.max(1, Math.min(10, compact));
@@ -1439,7 +1899,7 @@ export default function App() {
         )
       : uiText("مرن", "Flexible", "Flexible", "Flexible");
     const defensiveStyle =
-      line <= 4
+      line <= 4 || guidedSafe
         ? uiText("دفاع شامل", "All-out Defence", "Repliegue", "Défense totale")
         : uiText(
             "ضغط من الأمام",
@@ -1447,7 +1907,7 @@ export default function App() {
             "Presión alta",
             "Pressing haut",
           );
-    const pressuring = againstFastCounter
+    const pressuring = guidedSafe || againstFastCounter || rivalLong
       ? uiText("محافظ", "Conservative", "Conservador", "Conservateur")
       : uiText("عدواني", "Aggressive", "Agresivo", "Agressif");
 
@@ -1766,10 +2226,11 @@ export default function App() {
       ? getEfootballManager(formData.efootballManagerId) ||
         selectedEfootballManager
       : null;
+    // Final plan style is the source of truth. Do not let a manager default override the selected/generated result.
     const style = cleanTacticText(
-      manager?.primaryPlaystyle ||
+      currentResult?.attackingStyle ||
         formData.myStyle ||
-        currentResult?.attackingStyle ||
+        manager?.primaryPlaystyle ||
         "Balanced",
     );
     const profiles = isEfootballGame(selectedGame?.id)
@@ -1983,6 +2444,14 @@ export default function App() {
         defaultRewardWallet(),
       ),
     );
+    setCompetition(
+      normalizeCompetitionState(
+        readJson<CoachCompetitionState>(
+          scopedKey("coach_competition", userId),
+          defaultCompetitionState(),
+        ),
+      ),
+    );
     setScreenshotAnalyses(
       readJson<ScreenshotAnalysisResult[]>(
         scopedKey("screenshot_analyses", userId),
@@ -2004,6 +2473,8 @@ export default function App() {
     setDevelopmentResult(null);
     setProgression(defaultProgression());
     setRewardWallet(defaultRewardWallet());
+    setCompetition(defaultCompetitionState());
+    setCloudCoachLeague([]);
     setScreenshotAnalyses([]);
     setMatchAnalyses([]);
     setSubscription({
@@ -2048,6 +2519,100 @@ export default function App() {
         scopedKey("match_analyses", session.user.id),
         JSON.stringify(newList),
       );
+  };
+
+
+  const persistCompetition = (nextRaw: CoachCompetitionState) => {
+    const next = normalizeCompetitionState(nextRaw);
+    setCompetition(next);
+    if (session?.user?.id) {
+      localStorage.setItem(
+        scopedKey("coach_competition", session.user.id),
+        JSON.stringify(next),
+      );
+    }
+  };
+
+  const refreshCoachLeague = async () => {
+    const sb = getSupabase();
+    if (!sb || !session?.user?.id) return;
+    const { data, error } = await sb.rpc("get_weekly_coach_leaderboard", { p_limit: 20 });
+    if (error || !Array.isArray(data)) return;
+    setCloudCoachLeague(
+      data.map((row: any) => ({
+        name: row.display_name || "Coach",
+        points: Number(row.weekly_points || 0),
+        badge: row.rank_title || coachRankTitle(Number(row.weekly_points || 0), lang),
+        isCurrentUser: row.user_id === session.user.id,
+      })),
+    );
+  };
+
+  const consumeAiQuota = async (kind: AiUsageKind) => {
+    const localGuard = canUseLocalAi(competition, subscription.plan, kind);
+    if (!localGuard.ok) return { ok: false, used: localGuard.used, limit: localGuard.limit };
+    const sb = getSupabase();
+    if (sb && session?.user?.id) {
+      const { data, error } = await sb.rpc("consume_daily_ai_usage", { p_kind: kind });
+      if (!error && data) {
+        const cloudUsage = (data as any).usage || {};
+        const next = normalizeCompetitionState({
+          ...competition,
+          usage: {
+            date: todayKey(),
+            textGenerations: Number(cloudUsage.text_generation ?? competition.usage.textGenerations),
+            visionAnalyses: Number(cloudUsage.vision_analysis ?? competition.usage.visionAnalyses),
+            matchAnalyses: Number(cloudUsage.match_analysis ?? competition.usage.matchAnalyses),
+            coachTips: Number(cloudUsage.coach_tip ?? competition.usage.coachTips),
+          },
+        });
+        persistCompetition(next);
+        return { ok: true, used: Number((data as any).used || 0), limit: Number((data as any).limit || localGuard.limit) };
+      }
+      if (String(error?.message || "").includes("DAILY_AI_LIMIT_REACHED")) {
+        return { ok: false, used: localGuard.used, limit: localGuard.limit };
+      }
+    }
+    const next = consumeLocalAi(competition, kind);
+    persistCompetition(next);
+    return { ok: true, used: localGuard.used + 1, limit: localGuard.limit };
+  };
+
+  const awardCompetitionEvent = async (
+    type: CompetitionEventType,
+    meta: Record<string, unknown> = {},
+  ) => {
+    const localAward = awardLocalCompetition(competition, type, meta);
+    persistCompetition(localAward.state);
+    if (localAward.gained > 0) {
+      triggerToast(
+        uiText(
+          `+${localAward.gained} نقطة دوري المدربين`,
+          `+${localAward.gained} Coach League points`,
+          `+${localAward.gained} puntos de liga`,
+          `+${localAward.gained} points ligue`,
+        ),
+      );
+    }
+    const sb = getSupabase();
+    if (sb && session?.user?.id) {
+      const { data, error } = await sb.rpc("award_competition_points", {
+        p_event_type: type,
+        p_meta: meta,
+      });
+      if (!error && data) {
+        const cloud = data as any;
+        persistCompetition({
+          ...localAward.state,
+          weeklyPoints: Number(cloud.weekly_points ?? localAward.state.weeklyPoints),
+          seasonPoints: Number(cloud.season_points ?? localAward.state.seasonPoints),
+          totalPoints: Number(cloud.total_points ?? localAward.state.totalPoints),
+          currentStreak: Number(cloud.current_streak ?? localAward.state.currentStreak),
+          badges: Array.isArray(cloud.badges) ? cloud.badges : localAward.state.badges,
+        });
+        refreshCoachLeague();
+      }
+    }
   };
 
   const persistRewardWallet = (next: RewardWallet) => {
@@ -2219,7 +2784,7 @@ export default function App() {
         JSON.stringify(next),
       );
       const sb = getSupabase();
-      if (sb)
+      if (sb) {
         sb.from("user_progression")
           .upsert(
             {
@@ -2235,6 +2800,13 @@ export default function App() {
           .then(({ error }) => {
             if (error) console.warn("Progress sync pending:", error.message);
           });
+        sb.rpc("sync_user_feature_unlocks", {
+          p_xp: next.xp,
+          p_unlocks: progressionSyncPayload(next.xp, lang),
+        }).then(({ error }) => {
+          if (error) console.warn("Unlock sync pending:", error.message);
+        });
+      }
     }
   };
 
@@ -2256,6 +2828,18 @@ export default function App() {
           `+${gained} XP — progression tactique augmentée.`,
         ),
       );
+    const eventMap: Partial<Record<ActivityType, CompetitionEventType>> = {
+      generate: "generate_plan",
+      save: "save_tactic",
+      rival: "rival_profile",
+      improve: "improve_tactic",
+      daily_plan: "daily_challenge",
+      challenge: "daily_challenge",
+      match_analysis: "match_analysis",
+      screenshot_analysis: "screenshot_analysis",
+    };
+    const eventType = eventMap[activity];
+    if (eventType) void awardCompetitionEvent(eventType, { source: activity, game: selectedGame?.name || homeGameId });
   };
 
   const openChallengeAction = (activity: ActivityType) => {
@@ -2265,6 +2849,21 @@ export default function App() {
     setSelectedGame(null);
     setStep(1);
     setScreen("select-game");
+  };
+
+  const showLockedFeatureToast = (id: FeatureUnlockId) => {
+    const feature = featureUnlock(id);
+    triggerToast(
+      feature
+        ? `${feature.title[lang]} — ${featureUnlockMessage(progression.xp, id, lang)}`
+        : uiText("الميزة غير متاحة بعد.", "Feature is not available yet.", "Función no disponible.", "Fonction non disponible."),
+    );
+  };
+
+  const guardFeature = (id: FeatureUnlockId) => {
+    if (canUseProgressionFeature(id)) return true;
+    showLockedFeatureToast(id);
+    return false;
   };
 
   const triggerToast = (msg: string) => {
@@ -2570,6 +3169,37 @@ export default function App() {
         );
       }
 
+      const { data: cloudCompetition } = await sb
+        .from("coach_competition_profiles")
+        .select("total_points, weekly_points, season_points, week_key, season_key, current_streak, last_active_date, badges, daily_usage")
+        .eq("user_id", activeSession.user.id)
+        .maybeSingle();
+      if (cloudCompetition) {
+        const nextCompetition = normalizeCompetitionState({
+          totalPoints: Number(cloudCompetition.total_points || 0),
+          weeklyPoints: Number(cloudCompetition.weekly_points || 0),
+          seasonPoints: Number(cloudCompetition.season_points || 0),
+          weekKey: cloudCompetition.week_key,
+          seasonKey: cloudCompetition.season_key,
+          currentStreak: Number(cloudCompetition.current_streak || 1),
+          lastActiveDate: cloudCompetition.last_active_date || todayKey(),
+          badges: cloudCompetition.badges || [],
+          usage: {
+            date: todayKey(),
+            textGenerations: Number(cloudCompetition.daily_usage?.text_generation || 0),
+            visionAnalyses: Number(cloudCompetition.daily_usage?.vision_analysis || 0),
+            matchAnalyses: Number(cloudCompetition.daily_usage?.match_analysis || 0),
+            coachTips: Number(cloudCompetition.daily_usage?.coach_tip || 0),
+          },
+        });
+        setCompetition(nextCompetition);
+        localStorage.setItem(
+          scopedKey("coach_competition", activeSession.user.id),
+          JSON.stringify(nextCompetition),
+        );
+      }
+      refreshCoachLeague();
+
       const { data: cloudScreens } = await sb
         .from("screenshot_analyses")
         .select("result_data, created_at")
@@ -2712,13 +3342,14 @@ export default function App() {
       return;
     }
     if (generatorMode === "counter" && step === 2) {
-      const c = chooseCounterPlan(
-        selectedGame?.id,
-        formData.oppFormation,
-        formData.opponentStyle,
-        formData.matchState,
-      );
-      updateGeneratorForm({ myFormation: c.formation, myStyle: c.style }, true);
+      const rec = makeGuidedRecommendations("counter").find((x) => x.id === selectedGuidedCardId) || makeGuidedRecommendations("counter")[0];
+      applyGuidedRecommendation(rec);
+      setStep(4);
+      return;
+    }
+    if (generatorMode === "build" && step === 2) {
+      const rec = makeGuidedRecommendations("build").find((x) => x.id === selectedGuidedCardId) || makeGuidedRecommendations("build")[0];
+      applyGuidedRecommendation(rec);
       setStep(4);
       return;
     }
@@ -2818,6 +3449,61 @@ export default function App() {
     }
   };
 
+  const fetchAiPlanOverride = async (
+    rec: GuidedRecommendation | undefined,
+    form: typeof formData,
+  ): Promise<Partial<typeof formData> & { aiReason?: string; aiQuickActions?: string[] }> => {
+    const endpoint =
+      ((window as any).__TACTIC_BOSS_AI__?.coachEndpoint as string | undefined) ||
+      localStorage.getItem("tb_ai_coach_endpoint") ||
+      "/.netlify/functions/tactical-coach";
+    if (!endpoint || !selectedGame) return {};
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 6500);
+    try {
+      const sessionToken = await getSupabase()?.auth.getSession().then(({ data }) => data.session?.access_token).catch(() => undefined);
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
+        },
+        signal: controller.signal,
+        body: JSON.stringify({
+          task: generatorMode === "counter" ? "counter_plan" : "build_plan",
+          lang,
+          mode: generatorMode,
+          game: selectedGame.name,
+          gameId: selectedGame.id,
+          recommendation: rec,
+          inputs: form,
+          board: boardState,
+          allowedOnly: true,
+        }),
+      });
+      if (!res.ok) return {};
+      const data = await res.json();
+      const aiRec = data?.recommendation || data?.bestPlan || {};
+      const formation = typeof aiRec.formation === "string" ? aiRec.formation : "";
+      const style = typeof aiRec.style === "string" ? aiRec.style : "";
+      const reason = typeof aiRec.reason === "string" ? cleanTacticText(aiRec.reason) : "";
+      const quickActions = Array.isArray(data?.quickActions)
+        ? data.quickActions.map((x: unknown) => cleanTacticText(String(x))).filter(Boolean).slice(0, 3)
+        : [];
+      return {
+        ...(formation ? { myFormation: formation } : {}),
+        ...(style ? { myStyle: style } : {}),
+        ...(reason ? { aiReason: reason } : {}),
+        ...(quickActions.length ? { aiQuickActions: quickActions } : {}),
+      };
+    } catch (error) {
+      console.warn("AI plan override fallback:", error);
+      return {};
+    } finally {
+      window.clearTimeout(timeout);
+    }
+  };
+
   // Generate a game-specific tactic. A tracking or connectivity error cannot discard the generated plan.
   const handleGenerateTactic = async () => {
     if (!selectedGame) return;
@@ -2837,6 +3523,22 @@ export default function App() {
       return;
     }
 
+    if (!willUseExtraCredit) {
+      const quota = await consumeAiQuota("text_generation");
+      if (!quota.ok) {
+        triggerToast(
+          uiText(
+            "وصلت للحد اليومي المجاني للتوليد. ارجع بكرة أو استخدم Boss Coins/Pro.",
+            "Daily free generation limit reached. Come back tomorrow or use Boss Coins/Pro.",
+            "Límite diario alcanzado. Vuelve mañana o usa Pro.",
+            "Limite quotidienne atteinte. Revenez demain ou utilisez Pro.",
+          ),
+        );
+        setScreen("subs");
+        return;
+      }
+    }
+
     setIsLoading(true);
     setLoadingStep(0);
     const timers = [
@@ -2848,30 +3550,36 @@ export default function App() {
 
     try {
       await new Promise((resolve) => setTimeout(resolve, 1200));
-      const autoCounter = chooseCounterPlan(
-        selectedGame.id,
-        formData.oppFormation,
-        formData.opponentStyle,
-        formData.matchState,
-      );
-      const modeAwareForm =
+      const guidedRec = makeGuidedRecommendations(generatorMode).find((x) => x.id === selectedGuidedCardId) || makeGuidedRecommendations(generatorMode)[0];
+      let modeAwareForm =
         generatorMode === "build"
           ? {
               ...formData,
+              myFormation: guidedRec?.formation || formData.myFormation,
+              myStyle: guidedRec?.style || formData.myStyle,
               opponentStyle: uiText(
                 "بناء خطة المستخدم الخاصة",
                 "Build user-owned tactic",
                 "Crear táctica propia",
                 "Créer sa propre tactique",
               ),
-              notes: `${formData.notes} | MODE: BUILD_MY_TACTIC`,
+              notes: `${formData.notes} | MODE: BUILD_MY_TACTIC | ${guidedRec?.notes || "AI_GUIDED"}`,
             }
           : {
               ...formData,
-              myFormation: autoCounter.formation,
-              myStyle: autoCounter.style,
-              notes: `${formData.notes} | AUTO_COUNTER:${formData.oppFormation}:${formData.opponentStyle}:${formData.matchState}`,
+              myFormation: guidedRec?.formation || formData.myFormation,
+              myStyle: guidedRec?.style || formData.myStyle,
+              notes: `${formData.notes} | AUTO_COUNTER_AI:${formData.oppFormation}:${formData.opponentStyle}:${formData.matchState} | ${guidedRec?.notes || "AI_COUNTER"}`,
             };
+      const aiOverride = await fetchAiPlanOverride(guidedRec, modeAwareForm);
+      const aiPlanReason = aiOverride.aiReason || "";
+      const aiQuickActions = aiOverride.aiQuickActions || [];
+      modeAwareForm = {
+        ...modeAwareForm,
+        // V98 Final Plan Lock: AI may explain and suggest, but it must not silently change
+        // the formation/style selected by the user or by the chosen recommendation card.
+        notes: `${modeAwareForm.notes || ""} | AI_FIRST_ENGINE:${aiPlanReason || "local-fallback"}`,
+      };
       const rawResult = generateLocalTactic(selectedGame, modeAwareForm, lang);
       const result = normalizeResultLanguage(
         rawResult,
@@ -2881,33 +3589,43 @@ export default function App() {
       );
       const boardInsights = analyzeBoardShape(boardState, lang);
       const boardAwareResult = applyBoardIntelligence(result, boardState, lang);
-      const finalResult = { ...boardAwareResult, boardAnalysis: boardInsights };
-      if (isEfootballGame(selectedGame.id)) {
-        const manager =
-          getEfootballManager(formData.efootballManagerId) ||
-          efootballManagers[0];
-        setBoardState(
-          buildEfootballManagerBoard(
-            finalResult.formation,
+      const baseFinalResult = {
+        ...boardAwareResult,
+        formation: modeAwareForm.myFormation || boardAwareResult.formation,
+        attackingStyle: modeAwareForm.myStyle || boardAwareResult.attackingStyle,
+        reason: `${uiText("اختيار AI حسب إجاباتك وليس قالبًا ثابتًا.", "AI-selected from your answers, not a fixed template.", "IA según respuestas.", "IA selon vos réponses.")} ${aiPlanReason || boardAwareResult.reason || ""}`,
+        boardAnalysis: [
+          ...boardInsights,
+          ...aiQuickActions.map((item) => `${uiText("أمر AI سريع", "AI quick order", "Orden IA", "Ordre IA")}: ${item}`),
+        ],
+      };
+      const generatedBoard = isEfootballGame(selectedGame.id)
+        ? buildEfootballManagerBoard(
+            baseFinalResult.formation,
             formData.oppFormation,
-            manager,
-          ),
-        );
-      } else {
-        setBoardState(
-          buildGameAwareBoard(
+            getEfootballManager(formData.efootballManagerId) || efootballManagers[0],
+          )
+        : buildGameAwareBoard(
             selectedGame.id,
-            finalResult.formation,
+            baseFinalResult.formation,
             formData.oppFormation,
-          ),
-        );
-      }
+          );
+      const lockedPlan = lockFinalPlanResult(baseFinalResult, generatedBoard, {
+        sourceTool: generatorMode,
+        game: selectedGame.id,
+        language: lang,
+        formation: baseFinalResult.formation,
+        playstyle: baseFinalResult.attackingStyle,
+        confidenceFallback: resultTacticalScore,
+      });
+      const finalResult = lockedPlan.result;
+      const finalBoard = lockedPlan.board;
       const requestPayload = {
         game: selectedGame.name,
         game_id: selectedGame.id,
         generator_mode: generatorMode,
         ...modeAwareForm,
-        board: boardState,
+        board: finalBoard,
       };
 
       let tracking = { blocked: false, used: aiUsage, synced: false };
@@ -2959,9 +3677,13 @@ export default function App() {
         }
       }
 
+      setFormData(modeAwareForm);
+      setBoardState(finalBoard);
       setCurrentResult(finalResult);
       setCoachQuestion("");
       setCoachTips([]);
+      setCoachConflicts([]);
+      setCoachQuickActions([]);
       setScreen("result");
       awardActivity("generate");
       if (!tracking.synced) {
@@ -3073,9 +3795,15 @@ export default function App() {
 
   const askAiCoachForTips = async () => {
     if (!currentResult || coachTipsLoading) return;
+    // V104: Netlify Function is the source of truth for coach-tip quota.
+    // The previous client-side consume caused double charging and was bypassable.
     setCoachTipsLoading(true);
+    setCoachConflicts([]);
+    setCoachQuickActions([]);
     try {
+      const actionPlan = getActionPlan();
       const payload = {
+        task: "coach_current_plan",
         lang,
         mode: generatorMode,
         game: selectedGame?.name,
@@ -3086,25 +3814,50 @@ export default function App() {
         opponentStyle: formData.opponentStyle,
         matchState: formData.matchState,
         userNote: coachQuestion,
+        plan: currentResult,
+        inputs: formData,
+        direct: actionPlan.direct,
+        board: boardState,
         allowedOnly: true,
       };
       const runtimeCoachEndpoint =
         ((window as any).__TACTIC_BOSS_AI__?.coachEndpoint as string | undefined) ||
         localStorage.getItem("tb_ai_coach_endpoint") ||
         "/.netlify/functions/tactical-coach";
+      const sessionToken = await getSupabase()?.auth.getSession().then(({ data }) => data.session?.access_token).catch(() => undefined);
       const res = await fetch(runtimeCoachEndpoint, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
+        },
         body: JSON.stringify(payload),
       });
-      if (!res.ok) throw new Error(`coach ${res.status}`);
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        if (res.status === 429) {
+          triggerToast(uiText("وصلت لحد أسئلة المدرب اليومية.", "Daily coach-tip limit reached.", "Límite diario de coach alcanzado.", "Limite quotidienne coach atteinte."));
+        }
+        throw new Error(`coach ${res.status}`);
+      }
+      if (String(data?.provider || "").includes("not-connected") || String(data?.provider || "").includes("ai-error")) {
+        setCoachTips(fallbackCoachTips());
+        return;
+      }
       const tips = Array.isArray(data?.tips)
         ? data.tips
             .map((x: unknown) => cleanTacticText(String(x)))
-            .filter(Boolean)
+            .filter((x: string) => x && !/GEMINI_API_KEY|OPENAI_API_KEY|proxy|البروكسي|غير متصل/i.test(x))
             .slice(0, 5)
         : [];
+      const conflicts = Array.isArray(data?.conflicts)
+        ? data.conflicts.map((x: unknown) => cleanTacticText(String(x))).filter(Boolean).slice(0, 4)
+        : [];
+      const quickActions = Array.isArray(data?.quickActions)
+        ? data.quickActions.map((x: unknown) => cleanTacticText(String(x))).filter(Boolean).slice(0, 3)
+        : [];
+      setCoachConflicts(conflicts);
+      setCoachQuickActions(quickActions);
       setCoachTips(tips.length ? tips : fallbackCoachTips());
     } catch (error) {
       console.warn("AI coach tips fallback:", error);
@@ -3210,8 +3963,16 @@ export default function App() {
       notes: developmentForm.notes,
       efootballManagerId: formData.efootballManagerId,
     });
-    setBoardState(developmentBoard);
-    setCurrentResult(developmentResult.tactic);
+    const lockedDevelopment = lockFinalPlanResult(developmentResult.tactic, developmentBoard, {
+      sourceTool: "improve",
+      game: developmentGame.id,
+      language: lang,
+      formation: developmentResult.recommendedFormation,
+      playstyle: developmentForm.style,
+      confidenceFallback: resultTacticalScore,
+    });
+    setBoardState(lockedDevelopment.board);
+    setCurrentResult(lockedDevelopment.result);
     setScreen("result");
   };
 
@@ -3488,16 +4249,23 @@ export default function App() {
       notes: item.whyItWorks || "",
       efootballManagerId: formData.efootballManagerId,
     });
-    setBoardState(
-      isEfootballGame(game.id)
-        ? buildEfootballManagerBoard(
-            item.formation,
-            opponentFormation,
-            selectedEfootballManager,
-          )
-        : buildGameAwareBoard(game.id, item.formation, opponentFormation),
-    );
-    setCurrentResult(readyResult);
+    const metaBoard = isEfootballGame(game.id)
+      ? buildEfootballManagerBoard(
+          item.formation,
+          opponentFormation,
+          selectedEfootballManager,
+        )
+      : buildGameAwareBoard(game.id, item.formation, opponentFormation);
+    const lockedMetaPlan = lockFinalPlanResult(readyResult, metaBoard, {
+      sourceTool: "daily",
+      game: game.id,
+      language: lang,
+      formation: item.formation,
+      playstyle: item.playstyle,
+      confidenceFallback: item.score,
+    });
+    setBoardState(lockedMetaPlan.board);
+    setCurrentResult(lockedMetaPlan.result);
     awardActivity("daily_plan");
     setScreen("result");
   };
@@ -3532,6 +4300,9 @@ export default function App() {
       return;
     }
 
+    const lockedForSave = lockExistingResult(currentResult, getLockedBoardState());
+    const saveResult = lockedForSave.result;
+    const saveBoard = lockedForSave.board;
     const title = `${selectedGame.name} - ${formData.myTeam || uiText("فريقك", "Your team", "Tu equipo", "Votre équipe")} 🆚 ${formData.oppTeam || uiText("الخصم", "Opponent", "Rival", "Adversaire")}`;
     const { data: savedRow, error } = await sb
       .from("saved_tactics")
@@ -3545,8 +4316,8 @@ export default function App() {
         match_state: formData.matchState,
         team: formData.myTeam || "Your team",
         opponent_team: formData.oppTeam || "Opponent",
-        input_data: { ...formData, board: boardState },
-        result_data: currentResult,
+        input_data: { ...formData, board: saveBoard, finalPlanVersion: FINAL_PLAN_VERSION },
+        result_data: saveResult,
         user_id: session.user.id,
       })
       .select("*")
@@ -3585,8 +4356,8 @@ export default function App() {
       myTeam: formData.myTeam,
       oppTeam: formData.oppTeam,
       notes: formData.notes,
-      result: currentResult,
-      board: boardState,
+      result: saveResult,
+      board: saveBoard,
       createdAt: new Date(savedRow.created_at || Date.now()).toLocaleDateString(
         lang === "ar" ? "ar-EG" : "en-US",
         { day: "numeric", month: "short", year: "numeric" },
@@ -3889,46 +4660,328 @@ export default function App() {
     });
   };
 
-  // Share a localized tactic summary using the native share sheet when available.
+  const getSafeGameProfile = () => {
+    const id = selectedGame?.id || "";
+    if (id.includes("efootball")) return uiText("ملف تكتيكي حديث", "EFB Current Profile", "Perfil EFB actual", "Profil EFB actuel");
+    if (id.includes("pes")) return uiText("ملف كلاسيكي", "Classic Profile", "Perfil clásico", "Profil classique");
+    if (id.includes("fc") || id.includes("fifa")) return uiText("ملف حديث", "FC Modern Profile", "Perfil moderno", "Profil moderne");
+    return uiText("ملف تكتيكي", "Tactical Profile", "Perfil táctico", "Profil tactique");
+  };
+
+  const miniPitchPositions = (formation = "4-2-3-1") => {
+    const f = formation.replace(/\s+/g, "");
+    const defaults: Record<string, Array<[string, number, number]>> = {
+      "4-2-3-1": [["GK",50,91],["LB",16,75],["CB",38,76],["CB",62,76],["RB",84,75],["DMF",38,58],["CMF",62,58],["LWF",22,34],["AMF",50,43],["RWF",78,34],["CF",50,15]],
+      "4-2-1-3": [["GK",50,91],["LB",16,75],["CB",38,76],["CB",62,76],["RB",84,75],["DMF",38,58],["DMF",62,58],["AMF",50,43],["LWF",22,23],["RWF",78,23],["CF",50,12]],
+      "4-3-3": [["GK",50,91],["LB",16,75],["CB",38,76],["CB",62,76],["RB",84,75],["DMF",50,60],["CMF",32,48],["CMF",68,48],["LWF",22,24],["RWF",78,24],["CF",50,12]],
+      "3-2-4-1": [["GK",50,91],["CB",28,76],["CB",50,78],["CB",72,76],["DMF",38,60],["DMF",62,60],["LMF",16,42],["AMF",40,38],["AMF",60,38],["RMF",84,42],["CF",50,13]],
+      "4-4-2": [["GK",50,91],["LB",16,75],["CB",38,76],["CB",62,76],["RB",84,75],["LMF",18,48],["CMF",40,53],["CMF",60,53],["RMF",82,48],["SS",42,18],["CF",58,18]],
+      "5-3-2": [["GK",50,91],["LB",12,74],["CB",30,77],["CB",50,79],["CB",70,77],["RB",88,74],["DMF",50,58],["CMF",34,48],["CMF",66,48],["SS",40,20],["CF",60,20]],
+      "5-2-1-2": [["GK",50,91],["LB",12,74],["CB",30,77],["CB",50,79],["CB",70,77],["RB",88,74],["DMF",38,58],["DMF",62,58],["AMF",50,40],["SS",42,18],["CF",58,18]],
+      "5-2-2-1": [["GK",50,91],["LB",12,74],["CB",30,77],["CB",50,79],["CB",70,77],["RB",88,74],["DMF",38,58],["DMF",62,58],["LWF",24,30],["RWF",76,30],["CF",50,13]],
+      "3-5-2": [["GK",50,91],["CB",30,77],["CB",50,79],["CB",70,77],["LMF",15,50],["DMF",50,60],["CMF",35,45],["CMF",65,45],["RMF",85,50],["SS",40,18],["CF",60,18]],
+      "4-2-2-2": [["GK",50,91],["LB",16,75],["CB",38,76],["CB",62,76],["RB",84,75],["DMF",38,58],["DMF",62,58],["AMF",34,38],["AMF",66,38],["SS",42,18],["CF",58,18]],
+      "4-3-2-1": [["GK",50,91],["LB",16,75],["CB",38,76],["CB",62,76],["RB",84,75],["DMF",50,60],["CMF",32,50],["CMF",68,50],["AMF",40,32],["AMF",60,32],["CF",50,13]],
+    };
+    return defaults[f] || defaults["4-2-3-1"];
+  };
+
+  const drawRoundRect = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) => {
+    const radius = Math.min(r, w / 2, h / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + radius, y);
+    ctx.arcTo(x + w, y, x + w, y + h, radius);
+    ctx.arcTo(x + w, y + h, x, y + h, radius);
+    ctx.arcTo(x, y + h, x, y, radius);
+    ctx.arcTo(x, y, x + w, y, radius);
+    ctx.closePath();
+  };
+
+  const fitText = (ctx: CanvasRenderingContext2D, text: string, x: number, y: number, maxWidth: number, font: string, color: string, align: CanvasTextAlign = "left") => {
+    ctx.font = font;
+    ctx.fillStyle = color;
+    ctx.textAlign = align;
+    let t = cleanTacticText(text || "");
+    while (ctx.measureText(t).width > maxWidth && t.length > 4) t = t.slice(0, -2);
+    if (t !== text && t.length > 4) t = t.slice(0, -1) + "…";
+    ctx.fillText(t, x, y);
+  };
+
+  const createProShareCardBlob = async () => {
+    if (!currentResult) return null;
+    const actionPlan = getActionPlan();
+    const canvas = document.createElement("canvas");
+    canvas.width = 1280;
+    canvas.height = 1280;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+
+    try { await document.fonts?.ready; } catch {}
+
+    const isAr = lang === "ar";
+    const dir: CanvasDirection = isAr ? "rtl" : "ltr";
+    const fontFamily = isAr
+      ? "Cairo, Tajawal, 'Noto Sans Arabic', Arial, sans-serif"
+      : "Inter, Arial, sans-serif";
+    const roleBadge = (role: string) => {
+      const raw = String(role || "").trim();
+      const alpha = raw.replace(/[^A-Za-z]/g, " ").trim();
+      if (!alpha && raw.length <= 4) return raw.toUpperCase();
+      if (!alpha) return "P";
+      const known: Record<string, string> = {
+        goalkeeper: "GK", keeper: "GK", defender: "CB", midfielder: "CM", winger: "WG", forward: "CF", poacher: "CF",
+      };
+      const key = alpha.toLowerCase();
+      if (known[key]) return known[key];
+      if (alpha.length <= 4) return alpha.toUpperCase();
+      return alpha.split(/\s+/).map((word) => word[0]).join("").slice(0, 4).toUpperCase();
+    };
+    const cleanCardText = (value: unknown, fallback = "—") => {
+      const cleaned = cleanTacticText(String(value ?? "")).replace(/\s+/g, " ").trim();
+      return cleaned || fallback;
+    };
+    const shortText = (value: unknown, max = isAr ? 46 : 58) => {
+      const textValue = cleanCardText(value, "");
+      return textValue.length > max ? `${textValue.slice(0, max - 1).trim()}…` : textValue;
+    };
+    const ratingNumber = safeScore10((currentResult as any).score ?? (currentResult as any).rating, resultTacticalScore);
+    const confidenceNumber = Math.max(35, Math.min(99, safePercent(currentResult.confidence, 86)));
+    const formation = cleanCardText(currentResult.formation || formData.myFormation || "4-2-3-1");
+    const styleLabelRaw = cleanCardText(optionLabel(actionPlan.style, lang) || actionPlan.style || currentResult.attackingStyle || formData.myStyle || "Balanced");
+    const styleTitle = isAr ? shortText(styleLabelRaw, 28) : shortText(styleLabelRaw.toUpperCase(), 32);
+    const userName = shortText(coachName || "Tactic Boss", 24);
+    const planType = generatorMode === "counter"
+      ? uiText("خطة مضادة", "Counter Plan", "Plan contra", "Plan de contre")
+      : uiText("خطة شخصية", "My Tactic", "Mi táctica", "Ma tactique");
+    const finalBoardForCard = getLockedBoardState();
+    const boardPitchPositions: Array<[string, number, number]> = finalBoardForCard?.players
+      ?.filter((player) => !player.isOpponent)
+      .slice(0, 11)
+      .map((player) => [roleBadge(player.role), player.x, player.y]) || [];
+
+    const drawRR = (x:number, y:number, w:number, h:number, r:number, fill?: string | CanvasGradient, stroke?: string, lw = 1.5) => {
+      if (fill) { ctx.fillStyle = fill; drawRoundRect(ctx, x, y, w, h, r); ctx.fill(); }
+      if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = lw; drawRoundRect(ctx, x, y, w, h, r); ctx.stroke(); }
+    };
+    const setText = (font: string, color: string, align: CanvasTextAlign, direction: CanvasDirection = dir) => {
+      ctx.font = font;
+      ctx.fillStyle = color;
+      ctx.textAlign = align;
+      ctx.direction = direction;
+      ctx.textBaseline = "alphabetic";
+    };
+    const drawText = (value: unknown, x: number, y: number, maxWidth: number, font: string, color: string, align: CanvasTextAlign = isAr ? "right" : "left", direction: CanvasDirection = dir) => {
+      ctx.save();
+      setText(font, color, align, direction);
+      let t = cleanCardText(value, "");
+      while (ctx.measureText(t).width > maxWidth && t.length > 3) t = t.slice(0, -1);
+      if (cleanCardText(value, "") !== t && t.length > 3) t = `${t.slice(0, -1)}…`;
+      ctx.fillText(t, x, y);
+      ctx.restore();
+    };
+    const wrapLines = (value: unknown, maxWidth: number, font: string, maxLines = 3) => {
+      ctx.save();
+      ctx.font = font;
+      ctx.direction = dir;
+      const words = cleanCardText(value, "").split(/\s+/).filter(Boolean);
+      const lines: string[] = [];
+      let line = "";
+      words.forEach((word) => {
+        const next = line ? `${line} ${word}` : word;
+        if (ctx.measureText(next).width <= maxWidth || !line) {
+          line = next;
+        } else {
+          lines.push(line);
+          line = word;
+        }
+      });
+      if (line) lines.push(line);
+      ctx.restore();
+      if (lines.length > maxLines) {
+        const clipped = lines.slice(0, maxLines);
+        clipped[maxLines - 1] = `${clipped[maxLines - 1].replace(/…$/, "")}…`;
+        return clipped;
+      }
+      return lines;
+    };
+    const drawWrappedText = (value: unknown, x: number, y: number, maxWidth: number, font: string, color: string, lineHeight: number, align: CanvasTextAlign = isAr ? "right" : "left", maxLines = 3) => {
+      ctx.save();
+      setText(font, color, align);
+      wrapLines(value, maxWidth, font, maxLines).forEach((line, index) => ctx.fillText(line, x, y + index * lineHeight));
+      ctx.restore();
+    };
+
+    const bg = ctx.createLinearGradient(0, 0, 1280, 1280);
+    bg.addColorStop(0, "#020617");
+    bg.addColorStop(0.52, "#071426");
+    bg.addColorStop(1, "#12051f");
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, 1280, 1280);
+    const cyanGlow = ctx.createRadialGradient(1020, 130, 20, 1020, 130, 600);
+    cyanGlow.addColorStop(0, "rgba(34,211,238,.22)");
+    cyanGlow.addColorStop(1, "rgba(34,211,238,0)");
+    ctx.fillStyle = cyanGlow; ctx.fillRect(0, 0, 1280, 1280);
+    const violetGlow = ctx.createRadialGradient(120, 1060, 20, 120, 1060, 620);
+    violetGlow.addColorStop(0, "rgba(168,85,247,.22)");
+    violetGlow.addColorStop(1, "rgba(168,85,247,0)");
+    ctx.fillStyle = violetGlow; ctx.fillRect(0, 0, 1280, 1280);
+
+    ctx.shadowColor = "rgba(168,85,247,.8)"; ctx.shadowBlur = 18;
+    drawRR(24, 24, 1232, 1232, 28, undefined, "rgba(168,85,247,.9)", 3);
+    ctx.shadowColor = "rgba(34,211,238,.45)"; ctx.shadowBlur = 12;
+    drawRR(42, 42, 1196, 1196, 24, undefined, "rgba(34,211,238,.38)", 2);
+    ctx.shadowBlur = 0;
+
+    // Logo, loaded before drawing to avoid clipped/late canvas output.
+    try {
+      const logo = new Image();
+      logo.crossOrigin = "anonymous";
+      logo.src = "/assets/brand-logo-wide.png?v=104";
+      await new Promise((res) => { logo.onload = res; logo.onerror = res; });
+      ctx.drawImage(logo, isAr ? 820 : 56, 58, 360, 98);
+    } catch {
+      drawText("TACTIC BOSS AI", isAr ? 1180 : 70, 120, 360, `900 42px ${fontFamily}`, "#ffffff", isAr ? "right" : "left", "ltr");
+    }
+
+    const badgeX = isAr ? 56 : 890;
+    const badgeGrad = ctx.createLinearGradient(badgeX, 58, badgeX + 330, 118);
+    badgeGrad.addColorStop(0, "rgba(168,85,247,.32)");
+    badgeGrad.addColorStop(1, "rgba(34,211,238,.20)");
+    drawRR(badgeX, 58, 330, 64, 14, badgeGrad, "rgba(34,211,238,.65)", 2);
+    drawText(uiText("تقرير تكتيكي", "TACTICAL REPORT", "INFORME TÁCTICO", "RAPPORT TACTIQUE"), badgeX + 165, 99, 280, `900 27px ${fontFamily}`, "#ffffff", "center");
+
+    const heroX = isAr ? 1180 : 70;
+    drawText(formation, heroX, 300, 520, `900 118px ${fontFamily}`, "#ffffff", isAr ? "right" : "left", "ltr");
+    drawText(isAr ? uiText("أسلوب اللعب", "Playstyle") : "PLAYSTYLE", heroX, 372, 520, `900 24px ${fontFamily}`, "#38bdf8", isAr ? "right" : "left");
+    drawText(styleTitle, heroX, 426, 560, `900 45px ${fontFamily}`, "#22d3ee", isAr ? "right" : "left");
+    drawWrappedText(
+      isAr ? uiText("قرار مختصر قابل للتنفيذ بدون زحمة أو نصوص مقطوعة.", "A clean actionable tactic.") : "A clean actionable tactic built for quick decisions.",
+      heroX,
+      470,
+      560,
+      `700 24px ${fontFamily}`,
+      "#cbd5e1",
+      32,
+      isAr ? "right" : "left",
+      2,
+    );
+
+    // Mini pitch with safe global role abbreviations only.
+    const px = isAr ? 76 : 650, py = 205, pw = 540, ph = 395;
+    const pitchGrad = ctx.createLinearGradient(px, py, px + pw, py + ph);
+    pitchGrad.addColorStop(0, "rgba(8,92,78,.75)");
+    pitchGrad.addColorStop(1, "rgba(2,6,23,.95)");
+    drawRR(px, py, pw, ph, 20, pitchGrad, "rgba(34,211,238,.7)", 2);
+    ctx.save();
+    ctx.strokeStyle = "rgba(255,255,255,.18)"; ctx.lineWidth = 2;
+    ctx.strokeRect(px + 28, py + 24, pw - 56, ph - 48);
+    ctx.beginPath(); ctx.moveTo(px + 28, py + ph / 2); ctx.lineTo(px + pw - 28, py + ph / 2); ctx.stroke();
+    ctx.beginPath(); ctx.arc(px + pw / 2, py + ph / 2, 48, 0, Math.PI * 2); ctx.stroke();
+    ctx.restore();
+    (boardPitchPositions.length ? boardPitchPositions : miniPitchPositions(formation)).forEach(([pos, x, y]) => {
+      const cx = px + (x / 100) * pw;
+      const cy = py + (y / 100) * ph;
+      const isGk = pos === "GK";
+      const grd = ctx.createRadialGradient(cx - 7, cy - 8, 2, cx, cy, 21);
+      grd.addColorStop(0, isGk ? "#67e8f9" : "#ddd6fe");
+      grd.addColorStop(1, isGk ? "#0891b2" : "#7c3aed");
+      ctx.shadowColor = isGk ? "rgba(34,211,238,.7)" : "rgba(168,85,247,.8)";
+      ctx.shadowBlur = 11;
+      ctx.fillStyle = grd; ctx.beginPath(); ctx.arc(cx, cy, 21, 0, Math.PI * 2); ctx.fill();
+      ctx.shadowBlur = 0; ctx.strokeStyle = "rgba(255,255,255,.68)"; ctx.lineWidth = 2; ctx.stroke();
+      drawText(pos, cx, cy + 6, 42, `900 15px Arial`, "#ffffff", "center", "ltr");
+    });
+
+    const infoX = isAr ? 650 : 58;
+    drawRR(infoX, 540, 555, 126, 18, "rgba(15,23,42,.74)", "rgba(168,85,247,.45)", 1.6);
+    const leftCol = infoX + 38;
+    const rightCol = infoX + 318;
+    if (isAr) {
+      drawText(uiText("المستخدم", "User"), infoX + 515, 582, 210, `900 18px ${fontFamily}`, "#94a3b8", "right");
+      drawText(userName, infoX + 515, 618, 210, `800 25px ${fontFamily}`, "#ffffff", "right");
+      drawText(uiText("الوضع", "Mode"), infoX + 250, 582, 210, `900 18px ${fontFamily}`, "#94a3b8", "right");
+      drawText(planType, infoX + 250, 618, 210, `800 25px ${fontFamily}`, "#ffffff", "right");
+    } else {
+      drawText("USER", leftCol, 582, 210, `900 18px ${fontFamily}`, "#94a3b8", "left");
+      drawText(userName, leftCol, 618, 210, `800 25px ${fontFamily}`, "#ffffff", "left");
+      drawText("MODE", rightCol, 582, 210, `900 18px ${fontFamily}`, "#94a3b8", "left");
+      drawText(planType, rightCol, 618, 210, `800 25px ${fontFamily}`, "#ffffff", "left");
+    }
+
+    const statCard = (x:number, y:number, w:number, label:string, value:string, color:string) => {
+      drawRR(x, y, w, 138, 18, "rgba(15,23,42,.82)", color, 2);
+      drawText(label, isAr ? x + w - 28 : x + 28, y + 42, w - 56, `900 21px ${fontFamily}`, color, isAr ? "right" : "left");
+      drawText(value, isAr ? x + w - 28 : x + 28, y + 108, w - 56, `900 58px ${fontFamily}`, "#ffffff", isAr ? "right" : "left", "ltr");
+    };
+    statCard(isAr ? 350 : 58, 705, 260, uiText("تقييم", "Rating", "Nota", "Note"), `${ratingNumber.toFixed(1)}/10`, "#a855f7");
+    statCard(isAr ? 58 : 340, 705, 260, uiText("الثقة", "Confidence", "Confianza", "Confiance"), `${Math.round(confidenceNumber)}%`, "#22d3ee");
+
+    const panel = (x:number, y:number, w:number, h:number, title:string, color:string) => {
+      drawRR(x, y, w, h, 18, "rgba(15,23,42,.78)", color, 1.5);
+      drawText(title, isAr ? x + w - 26 : x + 26, y + 40, w - 52, `900 23px ${fontFamily}`, color, isAr ? "right" : "left");
+    };
+    const instructions = [
+      ...(actionPlan.direct.match || []),
+      ...((actionPlan.direct.attack || []).map(([k, v]) => `${k}: ${v}`)),
+    ].map((x) => shortText(x, 54)).filter(Boolean).slice(0, 3);
+    const settings = actionPlan.direct.defence.slice(0, 3).map(([k, v]) => `${cleanCardText(k)}: ${cleanCardText(v)}`);
+    const indexRows = [
+      [uiText("هجوم", "Attack", "Ataque", "Attaque"), 88],
+      [uiText("تحولات", "Transitions", "Transiciones", "Transitions"), 90],
+      [uiText("دفاع", "Defence", "Defensa", "Défense"), 78],
+      [uiText("ثبات", "Stability", "Estabilidad", "Stabilité"), 84],
+    ];
+
+    panel(58, 880, 360, 235, uiText("أوامر مختصرة", "Key orders", "Órdenes", "Ordres"), "rgba(168,85,247,.72)");
+    instructions.forEach((item, i) => drawWrappedText(`${i + 1}. ${item}`, isAr ? 390 : 86, 940 + i * 52, 295, `800 21px ${fontFamily}`, "#f8fafc", 28, isAr ? "right" : "left", 2));
+
+    panel(460, 880, 360, 235, uiText("أهم الإعدادات", "Key settings", "Ajustes", "Réglages"), "rgba(34,211,238,.72)");
+    settings.forEach((item, i) => drawWrappedText(item, isAr ? 792 : 488, 940 + i * 52, 295, `800 21px ${fontFamily}`, "#f8fafc", 28, isAr ? "right" : "left", 2));
+
+    panel(862, 880, 360, 235, uiText("مؤشر الخطة", "Tactic index", "Índice", "Index"), "rgba(168,85,247,.60)");
+    indexRows.forEach(([k, v], i) => {
+      const x = 900 + (i % 2) * 160;
+      const y = 950 + Math.floor(i / 2) * 78;
+      drawText(String(k), isAr ? x + 110 : x, y, 130, `800 18px ${fontFamily}`, "#cbd5e1", isAr ? "right" : "left");
+      drawText(String(v), isAr ? x + 110 : x, y + 36, 80, `900 36px ${fontFamily}`, i % 2 ? "#22d3ee" : "#a855f7", isAr ? "right" : "left", "ltr");
+    });
+
+    drawRR(58, 1155, 1164, 76, 16, "rgba(2,6,23,.92)", "rgba(168,85,247,.45)", 1.5);
+    drawText(uiText("شارك خطتك", "SHARE YOUR TACTIC", "COMPARTE TU TÁCTICA", "PARTAGEZ"), isAr ? 1180 : 95, 1202, 340, `900 25px ${fontFamily}`, "#ffffff", isAr ? "right" : "left");
+    drawText("★★★★★", 640, 1203, 280, "900 36px Arial", "#a855f7", "center", "ltr");
+    drawText("TACTIC BOSS AI", isAr ? 95 : 1180, 1202, 340, `900 24px ${fontFamily}`, "#e5e7eb", isAr ? "left" : "right", "ltr");
+
+    return await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png", 0.98));
+  };
+
+  // Share a generated premium tactic image. Fallback: download the PNG.
   const shareTacticInfo = async () => {
     if (!currentResult) return;
-    const shareText = `⚽ ${t.appName} - ${selectedGame?.name || ""} ⚽
-👉 ${t.yourFormationLabel}: ${currentResult.formation}
-🛡️ ${t.defensiveSettingsTitle}: ${currentResult.defensiveStyle}
-⚔️ ${t.attackingSettingsTitle}: ${currentResult.attackingStyle}
-🧠 ${t.playerInstructionsTitle}:
-${currentResult.playerInstructions.map((i) => `• ${i}`).join("\n")}
-🔥 ${t.gameplayStrategyTitle}: ${currentResult.inGameStrategy}
-- ${t.confidenceTitle}: ${currentResult.confidence}`;
     try {
-      if (navigator.share) {
+      const blob = await createProShareCardBlob();
+      if (!blob) throw new Error("No card blob");
+      const file = new File([blob], `tactic-boss-ai-${currentResult.formation}.png`, { type: "image/png" });
+      if (navigator.canShare?.({ files: [file] }) && navigator.share) {
         await navigator.share({
-          title: `${t.appName} — ${currentResult.formation}`,
-          text: shareText,
+          title: `Tactic Boss AI — ${currentResult.formation}`,
+          files: [file],
         });
       } else {
-        await navigator.clipboard.writeText(shareText);
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = file.name;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
       }
       setShareSuccess(true);
       setTimeout(() => setShareSuccess(false), 3000);
-      triggerToast(
-        uiText(
-          "الخطة جاهزة للمشاركة.",
-          "Tactic ready to share.",
-          "Táctica lista para compartir.",
-          "Tactique prête à partager.",
-        ),
-      );
+      void awardCompetitionEvent("share_card", { formation: currentResult.formation, game: selectedGame?.name || homeGameId });
+      triggerToast(uiText("تم تجهيز كارت المشاركة كصورة.", "Share card image ready.", "Imagen lista.", "Image prête."));
     } catch (error: any) {
-      if (String(error?.name || "") !== "AbortError")
-        triggerToast(
-          uiText(
-            "تعذر مشاركة الخطة الآن.",
-            "Could not share the tactic now.",
-            "No se pudo compartir la táctica.",
-            "Impossible de partager la tactique.",
-          ),
-        );
+      triggerToast(uiText("تعذر إنشاء صورة المشاركة الآن.", "Could not create the share image now.", "No se pudo crear la imagen.", "Impossible de créer l’image."));
     }
   };
 
@@ -4218,6 +5271,66 @@ ${currentResult.playerInstructions.map((i) => `• ${i}`).join("\n")}
     );
   }
 
+
+  const getLoadingCopy = () => {
+    const isLive = Boolean(liveRescueScenario || String(formData.notes || "").includes("LIVE_RESCUE"));
+    if (isLive) {
+      return {
+        title: uiText("جاري تجهيز قرار سريع للمباراة...", "Preparing an in-match rescue decision...", "Preparando una decisión rápida...", "Préparation d’une décision rapide..."),
+        steps: [
+          uiText("✓ قراءة حالة المباراة...", "✓ Reading the match state...", "✓ Leyendo el partido...", "✓ Lecture de l’état du match..."),
+          uiText("✓ اختيار التغيير الآمن...", "✓ Choosing the safest adjustment...", "✓ Eligiendo el ajuste seguro...", "✓ Choix de l’ajustement sûr..."),
+          uiText("✓ تجهيز أمر تنفيذي مختصر...", "✓ Preparing a short command...", "✓ Preparando una orden corta...", "✓ Préparation d’un ordre court..."),
+          uiText("⚡ القرار جاهز!", "⚡ Decision ready!", "⚡ ¡Decisión lista!", "⚡ Décision prête !"),
+        ],
+      };
+    }
+    if (generatorMode === "build") {
+      return {
+        title: uiText("المدرب الذكي يبني خطتك المثالية...", "AI Coach is building your best tactic...", "El coach IA crea tu táctica...", "Le coach IA crée votre tactique..."),
+        steps: [
+          uiText("✓ تحليل أسلوب لعبك...", "✓ Analyzing your playstyle...", "✓ Analizando tu estilo...", "✓ Analyse de votre style..."),
+          uiText("✓ اختيار التشكيلة الأنسب...", "✓ Selecting the best formation...", "✓ Eligiendo la formación...", "✓ Choix de la meilleure formation..."),
+          uiText("✓ تجهيز تعليمات اللاعبين...", "✓ Preparing player instructions...", "✓ Preparando instrucciones...", "✓ Préparation des consignes..."),
+          uiText("⚽ الخطة جاهزة!", "⚽ Tactic ready!", "⚽ ¡Táctica lista!", "⚽ Tactique prête !"),
+        ],
+      };
+    }
+    return {
+      title: uiText("المدرب الذكي يحلل خصمك...", "AI Coach is reading your rival...", "El coach IA lee al rival...", "Le coach IA lit l’adversaire..."),
+      steps: [
+        uiText("✓ تحليل أسلوب الخصم...", "✓ Analyzing rival playstyle...", "✓ Analizando al rival...", "✓ Analyse du style adverse..."),
+        uiText("✓ اختيار الخطة المضادة...", "✓ Selecting the counter plan...", "✓ Eligiendo el plan de contra...", "✓ Choix du plan de contre..."),
+        uiText("✓ تجهيز تعليمات اللاعبين...", "✓ Preparing player instructions...", "✓ Preparando instrucciones...", "✓ Préparation des consignes..."),
+        uiText("⚽ الخطة جاهزة!", "⚽ Tactic ready!", "⚽ ¡Táctica lista!", "⚽ Tactique prête !"),
+      ],
+    };
+  };
+
+  const loadingCopy = getLoadingCopy();
+
+  const normalizedCompetition = normalizeCompetitionState(competition);
+  const coachLeagueRows = (cloudCoachLeague.length
+    ? cloudCoachLeague
+    : localLeaderboard(coachName || "Tactic Boss", normalizedCompetition, lang)
+  ).sort((a, b) => b.points - a.points);
+  const competitionRankTitle = coachRankTitle(normalizedCompetition.seasonPoints, lang);
+  const competitionBadges = normalizedCompetition.badges.length
+    ? normalizedCompetition.badges.map((id) => badgeLabel(id, lang))
+    : [
+        uiText("قاهر خصم اليوم", "Daily Rival Slayer", "Cazador diario", "Vainqueur du jour"),
+        uiText("حارس الخطط", "Plan Keeper", "Guardián", "Gardien"),
+        uiText("كشاف الصور", "Vision Scout", "Scout visual", "Scout vision"),
+        uiText("منافس أسبوعي", "Weekly Contender", "Competidor", "Compétiteur"),
+      ];
+  const dailyChallengeDone = normalizedCompetition.completedDailyChallengeDate === todayKey();
+
+  const dailyRivalChallenge = {
+    formation: currentMeta?.[0]?.formation || "4-2-3-1",
+    style: currentMeta?.[0]?.playstyle || uiText("استحواذ", "Possession", "Posesión", "Possession"),
+    reward: 80,
+  };
+
   return (
     <div
       className={`${theme} min-h-screen text-[var(--text-main)] transition-colors duration-300 relative overflow-x-hidden pb-32 font-sans`}
@@ -4354,6 +5467,13 @@ ${currentResult.playerInstructions.map((i) => `• ${i}`).join("\n")}
                   "Progreso y desafíos",
                   "Progression et défis",
                 )}
+              {screen === "competition" &&
+                uiText(
+                  "دوري المدربين",
+                  "Coach League",
+                  "Liga de entrenadores",
+                  "Ligue des coachs",
+                )}
               {screen === "screenshot-analyzer" && "Screenshot Analyzer"}
               {screen === "match-analyst" && "AI Match Analyst"}
               {screen === "community" &&
@@ -4387,7 +5507,7 @@ ${currentResult.playerInstructions.map((i) => `• ${i}`).join("\n")}
 
             <div className="space-y-4 max-w-sm">
               <h2 className="text-xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-violet-300 via-indigo-100 to-emerald-300">
-                {t.generatingTitle}
+                {loadingCopy.title}
               </h2>
 
               <div className="space-y-2 py-4">
@@ -4395,42 +5515,22 @@ ${currentResult.playerInstructions.map((i) => `• ${i}`).join("\n")}
                 <div
                   className={`text-xs transition-all duration-300 ${loadingStep >= 1 ? "text-emerald-400 font-semibold" : "text-slate-500"}`}
                 >
-                  {uiText(
-                    "✓ تحليل أسلوب الخصم...",
-                    "✓ Analyzing opponent playstyle...",
-                    "✓ Analizando el estilo rival...",
-                    "✓ Analyse du style adverse...",
-                  )}
+                  {loadingCopy.steps[0]}
                 </div>
                 <div
                   className={`text-xs transition-all duration-300 ${loadingStep >= 2 ? "text-emerald-400 font-semibold" : "text-slate-500"}`}
                 >
-                  {uiText(
-                    "✓ اختيار التشكيل المضاد...",
-                    "✓ Selecting the counter formation...",
-                    "✓ Eligiendo la formación de contra...",
-                    "✓ Sélection de la formation de contre...",
-                  )}
+                  {loadingCopy.steps[1]}
                 </div>
                 <div
                   className={`text-xs transition-all duration-300 ${loadingStep >= 3 ? "text-emerald-400 font-semibold" : "text-slate-500"}`}
                 >
-                  {uiText(
-                    "✓ تجهيز تعليمات اللاعبين...",
-                    "✓ Preparing player instructions...",
-                    "✓ Preparando instrucciones...",
-                    "✓ Préparation des consignes...",
-                  )}
+                  {loadingCopy.steps[2]}
                 </div>
                 <div
                   className={`text-xs transition-all duration-300 ${loadingStep >= 4 ? "text-yellow-400 font-extrabold animate-pulse" : "text-slate-500"}`}
                 >
-                  {uiText(
-                    "⚽ الخطة جاهزة!",
-                    "⚽ Tactic ready!",
-                    "⚽ ¡Táctica lista!",
-                    "⚽ Tactique prête !",
-                  )}
+                  {loadingCopy.steps[3]}
                 </div>
               </div>
 
@@ -4468,14 +5568,17 @@ ${currentResult.playerInstructions.map((i) => `• ${i}`).join("\n")}
                   {coachName} • {favGame}
                 </span>
               </div>
-              <h1 className="text-3xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-slate-100 via-indigo-100 to-emerald-400">
-                TACTIC BOSS{" "}
-                <span className="font-mono text-violet-500">AI</span>
-              </h1>
+              <div className="flex justify-center">
+                <img
+                  src="/assets/brand-logo-wide.png?v=104"
+                  alt="Tactic Boss AI"
+                  className="h-16 max-w-[260px] object-contain drop-shadow-[0_0_18px_rgba(139,92,246,0.45)]"
+                />
+              </div>
               <p className="text-slate-400 mt-1 text-[11px] leading-relaxed max-w-sm mx-auto px-4">
                 {uiText(
-                  "اختار طريقك التكتيكي وابدأ فورًا.",
-                  "Choose your tactical path and start instantly.",
+                  "احكي المشكلة وخد خطة مضادة قابلة للتنفيذ فورًا.",
+                  "Describe the problem and get a playable counter instantly.",
                   "Elige tu ruta táctica y empieza.",
                   "Choisissez votre voie tactique et démarrez.",
                 )}
@@ -4488,204 +5591,210 @@ ${currentResult.playerInstructions.map((i) => `• ${i}`).join("\n")}
             >
               <div className="flex items-center gap-2 text-[11px] text-slate-300">
                 <span className="font-black text-white">
-                  Lv {currentLevel.level}
+                  Lv {tacticalLevel.level}
                 </span>
                 <span className="text-slate-500">•</span>
                 <span>
-                  XP {progression.xp}/{currentLevel.nextLevelXp}
+                  XP {progression.xp}/{tacticalLevel.nextLevelXp}
                 </span>
                 <span className="text-slate-500">•</span>
-                <span>{progression.streak || 0} 🔥</span>
+                <span>{normalizedCompetition.currentStreak || progression.streak || 0} 🔥</span>
               </div>
               <span className="text-[10px] text-violet-300 font-bold">
-                {uiText(
-                  "عرض التقدم",
-                  "View progress",
-                  "Ver progreso",
-                  "Voir progression",
-                )}
+                {nextProgressionUnlock
+                  ? `${uiText("القادم", "Next", "Próximo", "Suivant")}: ${nextProgressionUnlock.title[lang]}`
+                  : uiText("عرض التقدم", "View progress", "Ver progreso", "Voir progression")}
               </span>
             </button>
+
+            <div className="rounded-3xl border border-cyan-400/15 bg-slate-950/55 p-4 shadow-2xl shadow-cyan-950/20 space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-right">
+                  <div className="text-[10px] font-black text-cyan-300 uppercase tracking-widest">
+                    {uiText("مركز اليوم", "Daily Command Center", "Centro diario", "Centre du jour")}
+                  </div>
+                  <div className="mt-1 text-sm font-black text-white">
+                    {uiText("افتح قرارك التكتيكي اليومي", "Open today’s tactical decision", "Abre la decisión táctica", "Ouvrez la décision tactique")}
+                  </div>
+                </div>
+                <div className="h-11 w-11 rounded-2xl bg-cyan-400/10 border border-cyan-300/20 flex items-center justify-center">
+                  <Brain size={21} className="text-cyan-200" />
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <button onClick={() => setScreen("progression")} className="rounded-2xl bg-white/[0.04] border border-white/5 px-2 py-3">
+                  <div className="text-[10px] text-slate-400">{uiText("السلسلة", "Streak", "Racha", "Série")}</div>
+                  <div className="mt-1 text-lg font-black text-white">🔥 {normalizedCompetition.currentStreak || 0}</div>
+                </button>
+                <button onClick={() => setScreen("competition")} className="rounded-2xl bg-white/[0.04] border border-white/5 px-2 py-3">
+                  <div className="text-[10px] text-slate-400">{uiText("الدوري", "League", "Liga", "Ligue")}</div>
+                  <div className="mt-1 text-lg font-black text-white">{normalizedCompetition.weeklyPoints}</div>
+                </button>
+                <button onClick={() => setScreen("meta-center")} className="rounded-2xl bg-white/[0.04] border border-white/5 px-2 py-3">
+                  <div className="text-[10px] text-slate-400">{uiText("الميتا", "Meta", "Meta", "Méta")}</div>
+                  <div className="mt-1 text-lg font-black text-white font-mono">{currentMeta?.[0]?.formation || "4-2-3-1"}</div>
+                </button>
+              </div>
+            </div>
 
             <div className="space-y-3">
               <button
                 onClick={startBuildMyTactic}
-                className="group w-full rounded-3xl bg-gradient-to-r from-emerald-500 via-cyan-500 to-violet-600 p-[1px] shadow-2xl shadow-emerald-900/20"
+                className="group w-full rounded-3xl bg-gradient-to-r from-cyan-400 via-violet-500 to-fuchsia-500 p-[1px] shadow-2xl shadow-violet-950/25"
               >
-                <div className="rounded-3xl bg-gradient-to-r from-emerald-500/90 via-cyan-500/70 to-violet-600/90 px-5 py-4 flex items-center justify-between gap-4 text-right">
-                  <div className="h-12 w-12 rounded-2xl bg-white/12 border border-white/15 flex items-center justify-center shrink-0">
-                    <Sparkles size={23} className="text-amber-200" />
+                <div className="rounded-3xl bg-gradient-to-r from-slate-950/25 via-slate-900/15 to-slate-950/25 px-5 py-5 flex items-center justify-between gap-4 text-right backdrop-blur-sm">
+                  <div className="h-13 w-13 rounded-2xl bg-white/10 border border-white/15 flex items-center justify-center shrink-0">
+                    <Sparkles size={24} className="text-cyan-100" />
                   </div>
                   <div className="flex-1">
+                    <div className="inline-flex rounded-full bg-white/10 border border-white/10 px-2 py-0.5 text-[9px] font-black text-cyan-100 mb-2">
+                      {uiText("الاختيار الأساسي", "Main action", "Principal", "Principal")}
+                    </div>
                     <h3 className="text-xl font-black text-white">
-                      {uiText(
-                        "ابنِ خطتي",
-                        "Build My Tactic",
-                        "Crear mi táctica",
-                        "Créer ma tactique",
-                      )}
+                      {uiText("ابنِ خطتي", "Build My Tactic", "Crear mi táctica", "Créer ma tactique")}
                     </h3>
-                    <p className="text-[12px] text-white/80 mt-1 leading-relaxed">
-                      {uiText(
-                        "رتّب مراكزك وخلي الذكاء يبني لك أفضل خطة.",
-                        "Set your squad and let AI build your best tactic.",
-                        "Ordena tu equipo y deja que la IA construya.",
-                        "Organisez votre équipe et laissez l’IA créer.",
-                      )}
+                    <p className="text-[12px] text-white/75 mt-1 leading-relaxed">
+                      {uiText("احصل على أفضل خطة لأسلوبك.", "Get the best tactic for your style.", "La mejor táctica para tu estilo.", "La meilleure tactique pour votre style.")}
                     </p>
                   </div>
-                  <ChevronLeft
-                    size={18}
-                    className="text-white/80 group-hover:-translate-x-1 transition"
-                  />
+                  <ChevronLeft size={18} className="text-white/80 group-hover:-translate-x-1 transition" />
                 </div>
               </button>
 
-              <button
-                onClick={startCounterOpponent}
-                className="group w-full rounded-3xl bg-gradient-to-r from-violet-600 via-fuchsia-600 to-indigo-600 p-[1px] shadow-2xl shadow-violet-900/20"
-              >
-                <div className="rounded-3xl bg-gradient-to-r from-violet-600/95 via-fuchsia-600/70 to-indigo-600/95 px-5 py-4 flex items-center justify-between gap-4 text-right">
-                  <div className="h-12 w-12 rounded-2xl bg-white/12 border border-white/15 flex items-center justify-center shrink-0">
-                    <Zap size={23} className="text-yellow-200" />
+              <div className="grid grid-cols-1 gap-3">
+                <button
+                  onClick={startCounterOpponent}
+                  className="group w-full rounded-3xl border border-violet-400/20 bg-white/[0.045] hover:bg-white/[0.07] px-5 py-4 flex items-center justify-between gap-4 text-right transition"
+                >
+                  <div className="h-12 w-12 rounded-2xl bg-violet-400/10 border border-violet-300/20 flex items-center justify-center shrink-0">
+                    <Sword size={22} className="text-violet-200" />
                   </div>
                   <div className="flex-1">
-                    <h3 className="text-xl font-black text-white">
-                      {uiText(
-                        "اضرب الخصم",
-                        "Counter Opponent",
-                        "Contrarrestar rival",
-                        "Contrer l’adversaire",
-                      )}
-                    </h3>
-                    <p className="text-[12px] text-white/80 mt-1 leading-relaxed">
-                      {uiText(
-                        "حلّل أسلوب الخصم وخذ خطة مضادة جاهزة.",
-                        "Read the rival and get a ready counter plan.",
-                        "Lee al rival y recibe una contra lista.",
-                        "Analysez l’adversaire et obtenez un contre.",
-                      )}
-                    </p>
+                    <h3 className="text-lg font-black text-white">{uiText("اضرب خصمي", "Counter My Rival", "Contrarrestar rival", "Contrer l’adversaire")}</h3>
+                    <p className="text-[12px] text-slate-400 mt-1">{uiText("حوّل ضعف خصمك إلى خطة فوز.", "Turn rival weaknesses into a winning plan.", "Convierte debilidades en plan.", "Transformez ses faiblesses en plan.")}</p>
                   </div>
-                  <ChevronLeft
-                    size={18}
-                    className="text-white/80 group-hover:-translate-x-1 transition"
-                  />
-                </div>
-              </button>
+                  <ChevronLeft size={18} className="text-slate-400 group-hover:-translate-x-1 transition" />
+                </button>
 
-              <button
-                onClick={startAnalyzeMyMatch}
-                className="group w-full rounded-3xl bg-gradient-to-r from-cyan-500 via-sky-600 to-slate-800 p-[1px] shadow-2xl shadow-cyan-900/20"
-              >
-                <div className="rounded-3xl bg-gradient-to-r from-cyan-500/85 via-sky-700/75 to-slate-900 px-5 py-4 flex items-center justify-between gap-4 text-right">
-                  <div className="h-12 w-12 rounded-2xl bg-white/12 border border-white/15 flex items-center justify-center shrink-0">
-                    <BarChart3 size={23} className="text-cyan-100" />
+                <button
+                  onClick={startAnalyzeMyMatch}
+                  className="group w-full rounded-3xl border border-cyan-400/20 bg-white/[0.045] hover:bg-white/[0.07] px-5 py-4 flex items-center justify-between gap-4 text-right transition"
+                >
+                  <div className="h-12 w-12 rounded-2xl bg-cyan-400/10 border border-cyan-300/20 flex items-center justify-center shrink-0">
+                    <BarChart3 size={22} className="text-cyan-100" />
                   </div>
                   <div className="flex-1">
-                    <h3 className="text-xl font-black text-white">
-                      {uiText(
-                        "حلّل المباراة",
-                        "Analyze Match",
-                        "Analizar partido",
-                        "Analyser le match",
-                      )}
-                    </h3>
-                    <p className="text-[12px] text-white/80 mt-1 leading-relaxed">
-                      {uiText(
-                        "صورة تشكيل أو نتيجة أو إحصائيات داخل صفحة واحدة.",
-                        "Formation, result or stats screenshot in one tool.",
-                        "Formación, resultado o estadísticas en una herramienta.",
-                        "Formation, résultat ou stats dans un outil.",
-                      )}
-                    </p>
+                    <h3 className="text-lg font-black text-white">{uiText("حلّل المباراة", "Analyze Match", "Analizar partido", "Analyser le match")}</h3>
+                    <p className="text-[12px] text-slate-400 mt-1">{uiText("صورة أو إحصائيات تتحول لقرار واضح.", "Turn screenshots or stats into a clear decision.", "Convierte datos en decisión.", "Transformez stats en décision.")}</p>
                   </div>
-                  <ChevronLeft
-                    size={18}
-                    className="text-white/80 group-hover:-translate-x-1 transition"
-                  />
-                </div>
+                  <ChevronLeft size={18} className="text-slate-400 group-hover:-translate-x-1 transition" />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  onClick={startLiveRescue}
+                  className="rounded-2xl border border-amber-300/15 bg-amber-500/8 px-3 py-3 text-right hover:bg-amber-500/12 transition"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <Zap size={17} className="text-amber-200" />
+                    <div className="text-[11px] font-black text-white">{uiText("أمر سريع", "Quick Rescue", "Rescate", "Sauvetage")}</div>
+                  </div>
+                  <p className="mt-1 text-[10px] text-slate-400">{uiText("لو المباراة خرجت عن السيطرة.", "When the match gets out of control.", "Si el partido se complica.", "Si le match se complique.")}</p>
+                </button>
+                <button
+                  onClick={() => setScreen("competition")}
+                  className="rounded-2xl border border-fuchsia-300/15 bg-fuchsia-500/8 px-3 py-3 text-right hover:bg-fuchsia-500/12 transition"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <Trophy size={17} className="text-fuchsia-200" />
+                    <div className="text-[11px] font-black text-white">{uiText("دوري المدربين", "Coach League", "Liga", "Ligue")}</div>
+                  </div>
+                  <p className="mt-1 text-[10px] text-slate-400">{uiText("نافس في تحدي الخصم اليومي.", "Compete in the daily rival challenge.", "Compite en el reto diario.", "Défi rival quotidien.")}</p>
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2">
+              <button onClick={() => setScreen("meta-center")} className="rounded-2xl bg-white/[0.035] border border-white/5 p-3 text-center hover:bg-white/[0.07]">
+                <Target size={17} className="mx-auto text-rose-300" />
+                <div className="mt-2 text-[10px] text-slate-200 font-bold">{uiText("ميتا اليوم", "Meta", "Meta", "Méta")}</div>
               </button>
+              <button onClick={() => setScreen("community")} className="rounded-2xl bg-white/[0.035] border border-white/5 p-3 text-center hover:bg-white/[0.07]">
+                <Users size={17} className="mx-auto text-cyan-300" />
+                <div className="mt-2 text-[10px] text-slate-200 font-bold">{uiText("المجتمع", "Community", "Comunidad", "Communauté")}</div>
+              </button>
+              <button onClick={() => { resetToolWorkspace(); setScreen("sandbox-board"); }} className="rounded-2xl bg-white/[0.035] border border-white/5 p-3 text-center hover:bg-white/[0.07]">
+                <Shield size={17} className="mx-auto text-emerald-300" />
+                <div className="mt-2 text-[10px] text-slate-200 font-bold">{uiText("السبورة", "Board", "Pizarra", "Tableau")}</div>
+              </button>
+            </div>
+          </div>
+        )}
+
+
+        {screen === "competition" && (
+          <div className="space-y-4 animate-fade-in pb-16">
+            <div className="rounded-3xl border border-fuchsia-400/20 bg-gradient-to-br from-fuchsia-500/10 via-slate-950/80 to-cyan-500/10 p-4 shadow-2xl shadow-fuchsia-950/20">
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-right">
+                  <div className="text-[10px] font-black text-fuchsia-300 uppercase tracking-widest">{uiText("تحدي الخصم اليومي", "Daily Rival Challenge", "Reto diario", "Défi quotidien")}</div>
+                  <h2 className="mt-1 text-xl font-black text-white">{dailyRivalChallenge.formation}</h2>
+                  <p className="mt-1 text-[11px] text-slate-300">{uiText("اصنع خطة توقف أسلوب", "Build a plan to stop", "Crea un plan contra", "Créez un plan contre")} {dailyRivalChallenge.style}</p>
+                </div>
+                <div className="h-14 w-14 rounded-2xl bg-fuchsia-400/10 border border-fuchsia-300/20 flex items-center justify-center">
+                  <Trophy size={26} className="text-fuchsia-200" />
+                </div>
+              </div>
+              <div className="mt-4 grid grid-cols-3 gap-2 text-center">
+                <div className="rounded-2xl bg-slate-950/55 border border-white/5 p-3">
+                  <div className="text-[9px] text-slate-500">{uiText("المكافأة", "Reward", "Premio", "Récompense")}</div>
+                  <div className="text-sm font-black text-white">+{dailyRivalChallenge.reward}</div>
+                </div>
+                <div className="rounded-2xl bg-slate-950/55 border border-white/5 p-3">
+                  <div className="text-[9px] text-slate-500">{uiText("رتبتك", "Rank", "Rango", "Rang")}</div>
+                  <div className="text-[11px] font-black text-white">{competitionRankTitle}</div>
+                </div>
+                <div className="rounded-2xl bg-slate-950/55 border border-white/5 p-3">
+                  <div className="text-[9px] text-slate-500">{uiText("الأسبوع", "Week", "Semana", "Semaine")}</div>
+                  <div className="text-sm font-black text-white">{normalizedCompetition.weeklyPoints}</div>
+                </div>
+              </div>
+              <button type="button" onClick={() => { void awardCompetitionEvent("daily_challenge", { formation: dailyRivalChallenge.formation, style: dailyRivalChallenge.style }); startCounterOpponent(); }} disabled={dailyChallengeDone} className="mt-4 w-full rounded-2xl bg-fuchsia-600 hover:bg-fuchsia-500 text-white font-black py-3 text-xs flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                <Sword size={15} />
+                {dailyChallengeDone ? uiText("تم احتساب تحدي اليوم", "Today’s challenge counted", "Reto contado", "Défi compté") : uiText("ابدأ التحدي", "Start challenge", "Empezar reto", "Commencer le défi")}
+              </button>
+            </div>
+
+            <div className="rounded-3xl border border-white/8 bg-white/[0.04] p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-black text-white">{uiText("ترتيب الأسبوع", "Weekly leaderboard", "Clasificación semanal", "Classement hebdo")}</h3>
+                <span className="text-[10px] font-black text-cyan-300">Season 1</span>
+              </div>
+              {coachLeagueRows.map((row, index) => (
+                <div key={row.name} className={`rounded-2xl border px-3 py-3 flex items-center justify-between gap-3 ${row.isCurrentUser || row.name === (coachName || "Tactic Boss") ? "border-cyan-300/25 bg-cyan-500/10" : "border-white/5 bg-slate-950/45"}`}>
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="h-9 w-9 rounded-xl bg-white/5 border border-white/8 flex items-center justify-center font-black text-white">{index + 1}</div>
+                    <div className="min-w-0">
+                      <div className="text-xs font-black text-white truncate">{row.name}</div>
+                      <div className="text-[9px] text-slate-400 truncate">{row.badge}</div>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-sm font-black text-white font-mono">{row.points}</div>
+                    <div className="text-[9px] text-slate-500">PTS</div>
+                  </div>
+                </div>
+              ))}
             </div>
 
             <div className="grid grid-cols-2 gap-3">
-              <button
-                onClick={() => setScreen("meta-center")}
-                className="rounded-2xl border border-rose-400/15 bg-rose-950/15 p-3 text-right hover:bg-rose-500/10 transition"
-              >
-                <div className="text-[10px] font-black text-rose-300">
-                  {uiText(
-                    "ميتا اليوم",
-                    "Today’s Meta",
-                    "Meta de hoy",
-                    "Méta du jour",
-                  )}
+              {competitionBadges.slice(0, 4).map((badge) => (
+                <div key={badge} className="rounded-2xl border border-violet-400/15 bg-violet-500/8 p-3 text-center">
+                  <Award size={17} className="mx-auto text-violet-200" />
+                  <div className="mt-2 text-[10px] font-black text-white">{badge}</div>
                 </div>
-                <div className="mt-1 text-2xl font-black text-white font-mono">
-                  {currentMeta?.[0]?.formation || "4-2-3-1"}
-                </div>
-                <div className="mt-1 text-[10px] text-slate-400">
-                  {uiText(
-                    "خطة جاهزة للاستخدام",
-                    "Ready plan",
-                    "Plan listo",
-                    "Plan prêt",
-                  )}
-                </div>
-              </button>
-              <button
-                onClick={() => setScreen("progression")}
-                className="rounded-2xl border border-violet-400/15 bg-violet-950/15 p-3 text-right hover:bg-violet-500/10 transition"
-              >
-                <div className="text-[10px] font-black text-violet-300">
-                  {uiText(
-                    "تحدي اليوم",
-                    "Daily Challenge",
-                    "Desafío diario",
-                    "Défi quotidien",
-                  )}
-                </div>
-                <div className="mt-1 text-2xl font-black text-white">
-                  {
-                    currentChallenges.filter((c) =>
-                      progression.completedChallengeIds.includes(c.id),
-                    ).length
-                  }
-                  /{currentChallenges.length}
-                </div>
-                <div className="mt-1 text-[10px] text-slate-400">
-                  {uiText(
-                    "ارفع مستواك يوميًا",
-                    "Level up daily",
-                    "Sube de nivel",
-                    "Progressez",
-                  )}
-                </div>
-              </button>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                onClick={() => setScreen("community")}
-                className="rounded-2xl bg-white/[0.04] border border-white/5 p-3 text-center hover:bg-white/[0.08]"
-              >
-                <Users size={18} className="mx-auto text-cyan-300" />
-                <div className="mt-2 text-[10px] text-slate-200 font-bold">
-                  {uiText("المجتمع", "Community", "Comunidad", "Communauté")}
-                </div>
-              </button>
-              <button
-                onClick={() => {
-                  resetToolWorkspace();
-                  setScreen("sandbox-board");
-                }}
-                className="rounded-2xl bg-white/[0.04] border border-white/5 p-3 text-center hover:bg-white/[0.08]"
-              >
-                <Target size={18} className="mx-auto text-amber-300" />
-                <div className="mt-2 text-[10px] text-slate-200 font-bold">
-                  {uiText("السبورة", "Board", "Pizarra", "Tableau")}
-                </div>
-              </button>
+              ))}
             </div>
           </div>
         )}
@@ -4745,6 +5854,64 @@ ${currentResult.playerInstructions.map((i) => `• ${i}`).join("\n")}
               challenges={currentChallenges}
               onAction={openChallengeAction}
             />
+
+            <div className="rounded-3xl border border-violet-400/20 bg-gradient-to-br from-violet-500/10 via-slate-950/75 to-cyan-500/10 p-4 space-y-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-[10px] font-black text-violet-300 uppercase tracking-widest">
+                    {uiText("مسار فتح المميزات", "Feature unlock path", "Ruta de funciones", "Parcours des fonctions")}
+                  </div>
+                  <h3 className="mt-1 text-sm font-black text-white">
+                    {uiText("كل XP يفتح حاجة جديدة", "Every XP unlocks more value", "Cada XP abre más", "Chaque XP ouvre plus")}
+                  </h3>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-center">
+                  <div className="text-[9px] text-slate-400">LEVEL</div>
+                  <div className="text-lg font-black text-white">{tacticalLevel.level}</div>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-[10px] font-bold text-slate-400">
+                  <span>{progression.xp} XP</span>
+                  <span>{tacticalLevel.xpToNext > 0 ? uiText(`باقي ${tacticalLevel.xpToNext} XP للمستوى ${tacticalLevel.nextLevel}`, `${tacticalLevel.xpToNext} XP to Level ${tacticalLevel.nextLevel}`, `${tacticalLevel.xpToNext} XP`, `${tacticalLevel.xpToNext} XP`) : uiText("أعلى مستوى حاليًا", "Current max level", "Nivel máximo", "Niveau max")}</span>
+                </div>
+                <div className="h-2 rounded-full bg-slate-900 overflow-hidden border border-white/5">
+                  <div className="h-full rounded-full bg-gradient-to-r from-violet-500 to-cyan-400" style={{ width: `${tacticalLevel.progress}%` }} />
+                </div>
+              </div>
+
+              {nextProgressionUnlock && (
+                <div className="rounded-2xl border border-cyan-300/15 bg-cyan-500/8 p-3 flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-[9px] font-black text-cyan-300 uppercase">{uiText("القادم", "Next unlock", "Próximo", "Suivant")}</div>
+                    <div className="mt-1 text-xs font-black text-white">{nextProgressionUnlock.title[lang]}</div>
+                    <div className="mt-1 text-[10px] text-slate-400 leading-relaxed">{nextProgressionUnlock.description[lang]}</div>
+                  </div>
+                  <div className="rounded-xl bg-slate-950/70 border border-white/5 px-2 py-1 text-[10px] font-black text-cyan-200 whitespace-nowrap">
+                    Lv {nextProgressionUnlock.level}
+                  </div>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 gap-2">
+                {FEATURE_UNLOCKS.filter(item => item.id !== "basic_tools").slice(0, 7).map((item) => {
+                  const isUnlocked = canUseProgressionFeature(item.id);
+                  return (
+                    <div key={item.id} className={`rounded-2xl border px-3 py-3 flex items-center justify-between gap-3 ${isUnlocked ? "border-emerald-300/15 bg-emerald-500/8" : "border-white/5 bg-slate-950/45"}`}>
+                      <div className="min-w-0">
+                        <div className={`text-[11px] font-black truncate ${isUnlocked ? "text-emerald-100" : "text-slate-300"}`}>{item.title[lang]}</div>
+                        <div className="mt-1 text-[9px] text-slate-500 truncate">{item.description[lang]}</div>
+                      </div>
+                      <div className={`rounded-xl px-2 py-1 text-[9px] font-black whitespace-nowrap ${isUnlocked ? "bg-emerald-400/10 text-emerald-200" : "bg-white/5 text-slate-500"}`}>
+                        {isUnlocked ? uiText("مفتوح", "Unlocked", "Abierto", "Ouvert") : `Lv ${item.level}`}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
             <div className="bg-white/5 border border-white/5 rounded-2xl p-4 space-y-3">
               <div className="flex items-center justify-between">
                 <h3 className="text-xs font-black text-white">
@@ -4780,6 +5947,11 @@ ${currentResult.playerInstructions.map((i) => `• ${i}`).join("\n")}
             usedToday={countToday(screenshotAnalyses)}
             history={screenshotAnalyses}
             onAnalyze={recordScreenshotAnalysis}
+            onBeforeAnalyze={async () => {
+              // V104: real Vision quota is consumed server-side inside the Netlify Function.
+              // This preflight only keeps the UI flow clean; the component still blocks by saved daily history.
+              return true;
+            }}
             onAutofill={autofillFromScreenshot}
           />
         )}
@@ -4835,6 +6007,10 @@ ${currentResult.playerInstructions.map((i) => `• ${i}`).join("\n")}
                 usedToday={countToday(screenshotAnalyses)}
                 history={screenshotAnalyses}
                 onAnalyze={recordScreenshotAnalysis}
+                onBeforeAnalyze={async () => {
+                  // V104: real Vision quota is consumed server-side inside the Netlify Function.
+                  return true;
+                }}
                 onAutofill={autofillFromScreenshot}
               />
             ) : (
@@ -4844,6 +6020,10 @@ ${currentResult.playerInstructions.map((i) => `• ${i}`).join("\n")}
                 usedToday={countToday(matchAnalyses)}
                 history={matchAnalyses}
                 onAnalyze={recordMatchAnalysis}
+                onBeforeAnalyze={async () => {
+                  // V104: real Match Vision quota is consumed server-side inside the Netlify Function.
+                  return true;
+                }}
                 onCreatePlan={createPlanFromMatchAnalysis}
               />
             )}
@@ -4878,8 +6058,16 @@ ${currentResult.playerInstructions.map((i) => `• ${i}`).join("\n")}
                 notes: tactic.notes,
                 efootballManagerId: formData.efootballManagerId,
               });
-              setCurrentResult(tactic.result);
-              setBoardState(tactic.board || null);
+              const locked = lockFinalPlanResult(tactic.result, tactic.board || tactic.result.finalBoard || null, {
+                sourceTool: "community",
+                game: tactic.game,
+                language: lang,
+                formation: tactic.myFormation,
+                playstyle: tactic.myStyle,
+                confidenceFallback: resultTacticalScore,
+              });
+              setCurrentResult(locked.result);
+              setBoardState(locked.board);
               setScreen("result");
             }}
           />
@@ -4962,7 +6150,7 @@ ${currentResult.playerInstructions.map((i) => `• ${i}`).join("\n")}
                           "Aucun adversaire spécifique",
                         ),
                       };
-                      if (manager) setEfootballPlaystyleFilter(manager.primaryPlaystyle);
+                      if (isEfootballGame(game.id)) setEfootballPlaystyleFilter(normalizeEfootballPlaystyle(nextForm.myStyle));
                       setFormData(nextForm);
                       setBoardState(
                         manager
@@ -5127,306 +6315,203 @@ ${currentResult.playerInstructions.map((i) => `• ${i}`).join("\n")}
               <div className="space-y-4 animate-fade-in">
                 {generatorMode === "build" ? (
                   <div className="space-y-4">
-                    <div className="rounded-2xl border border-emerald-500/15 bg-emerald-500/5 p-3">
-                      <h3 className="text-sm font-black text-emerald-300">
-                        {uiText(
-                          "ابنِ أسلوب لعبك فقط",
-                          "Build your own playstyle",
-                          "Construye tu estilo",
-                          "Construisez votre style",
-                        )}
-                      </h3>
-                      <p className="mt-1 text-[11px] text-slate-400 leading-relaxed">
-                        {uiText(
-                          "لا يوجد خصوم هنا. اختر هويتك، التشكيلة، ومستوى المخاطرة وسيخرج التطبيق خطة أساسية جاهزة.",
-                          "No opponents here. Choose identity, formation and risk level; the app gives you a ready base tactic.",
-                          "Sin rival aquí.",
-                          "Pas d’adversaire ici.",
-                        )}
-                      </p>
-                    </div>
-                    {efootballMode && (
-                      <div className="rounded-3xl border border-sky-400/20 bg-sky-950/10 p-3 space-y-3">
+                    <div className="rounded-3xl border border-emerald-400/20 bg-gradient-to-br from-emerald-500/10 to-cyan-500/5 p-4">
+                      <div className="flex items-start gap-3">
+                        <div className="h-10 w-10 rounded-2xl bg-emerald-400/10 border border-emerald-400/20 flex items-center justify-center text-emerald-200 shrink-0">
+                          <Brain size={18} />
+                        </div>
                         <div>
-                          <h3 className="text-sm font-black text-sky-200">
-                            {uiText(
-                              "eFootball: اختَر الأسلوب أو المدرب أولًا",
-                              "eFootball: choose playstyle or manager first",
-                              "eFootball: elige estilo o mánager",
-                              "eFootball : choisissez style ou manager",
-                            )}
+                          <h3 className="text-base font-black text-emerald-200">
+                            {uiText("المدرب يختار لك الخطة", "Coach picks the tactic for you", "El coach elige", "Le coach choisit")}
                           </h3>
-                          <p className="mt-1 text-[10px] leading-relaxed text-slate-400">
-                            {uiText(
-                              "بعد الاختيار ستظهر التشكيلات المناسبة فقط، ومنها يتم بناء الخطة.",
-                              "Recommended formations appear after the choice, then the tactic is built.",
-                              "Después aparecen formaciones recomendadas.",
-                              "Les formations recommandées apparaissent ensuite.",
-                            )}
+                          <p className="mt-1 text-[11px] text-slate-400 leading-relaxed">
+                            {uiText("جاوب بإحساسك فقط. لا تختار خطة من الصفر؛ اختَر هدفك وسيظهر لك أفضل 3 اختيارات قابلة للتنفيذ.", "Answer with your feeling only. Do not pick a shape from scratch; choose your goal and get 3 playable recommendations.", "Elige objetivo.", "Choisissez l’objectif.")}
                           </p>
                         </div>
-                        <div className="grid grid-cols-1 gap-2">
-                          <select
-                            value={efootballPlaystyleFilter}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              setEfootballPlaystyleFilter(val);
-                              const filtered =
-                                val === "all"
-                                  ? efootballManagers
-                                  : efootballManagers.filter(
-                                      (m) =>
-                                        m.primaryPlaystyle === val ||
-                                        m.secondaryPlaystyles.includes(
-                                          val as any,
-                                        ),
-                                    );
-                              const manager =
-                                filtered[0] || efootballManagers[0];
-                              if (manager) {
-                                const nextFormation = manager.bestFormations[0];
-                                const next = {
-                                  ...formData,
-                                  efootballManagerId: manager.id,
-                                  myStyle: manager.primaryPlaystyle,
-                                  myFormation: nextFormation,
-                                };
-                                setFormData(next);
-                                setTimeout(
-                                  () =>
-                                    setBoardState(
-                                      buildEfootballManagerBoard(
-                                        nextFormation,
-                                        next.oppFormation,
-                                        manager,
-                                      ),
-                                    ),
-                                  0,
-                                );
-                              }
-                            }}
-                            className="w-full bg-slate-900/80 border border-white/5 rounded-xl px-3 py-2.5 text-xs text-slate-100 outline-none focus:border-sky-500"
-                          >
-                            <option value="all">
-                              {uiText(
-                                "كل أساليب اللعب",
-                                "All playstyles",
-                                "Todos los estilos",
-                                "Tous les styles",
-                              )}
-                            </option>
-                            <option value="Possession Game">
-                              {managerPlaystyleLabel("Possession Game", lang)}
-                            </option>
-                            <option value="Quick Counter">
-                              {managerPlaystyleLabel("Quick Counter", lang)}
-                            </option>
-                            <option value="Long Ball Counter">
-                              {managerPlaystyleLabel("Long Ball Counter", lang)}
-                            </option>
-                            <option value="Out Wide">
-                              {managerPlaystyleLabel("Out Wide", lang)}
-                            </option>
-                            <option value="Long Ball">
-                              {managerPlaystyleLabel("Long Ball", lang)}
-                            </option>
-                          </select>
-                          <select
-                            value={formData.efootballManagerId}
-                            onChange={(e) => {
-                              const manager =
-                                getEfootballManager(e.target.value) ||
-                                efootballManagers[0];
-                              const nextFormation = manager.bestFormations[0];
-                              const next = {
-                                ...formData,
-                                efootballManagerId: manager.id,
-                                myStyle: manager.primaryPlaystyle,
-                                myFormation: nextFormation,
-                              };
-                              setFormData(next);
-                              setEfootballPlaystyleFilter(
-                                manager.primaryPlaystyle,
-                              );
-                              setTimeout(
-                                () =>
-                                  setBoardState(
-                                    buildEfootballManagerBoard(
-                                      nextFormation,
-                                      next.oppFormation,
-                                      manager,
-                                    ),
-                                  ),
-                                0,
-                              );
-                            }}
-                            className="w-full bg-slate-900/80 border border-white/5 rounded-xl px-3 py-2.5 text-xs text-slate-100 outline-none focus:border-sky-500"
-                          >
-                            {(efootballPlaystyleFilter === "all"
-                              ? efootballManagers
-                              : efootballManagers.filter(
-                                  (m) =>
-                                    m.primaryPlaystyle ===
-                                      efootballPlaystyleFilter ||
-                                    m.secondaryPlaystyles.includes(
-                                      efootballPlaystyleFilter as any,
-                                    ),
-                                )
-                            ).map((manager) => (
-                              <option key={manager.id} value={manager.id}>
-                                {manager.name} —{" "}
-                                {managerPlaystyleLabel(
-                                  manager.primaryPlaystyle,
-                                  lang,
-                                )}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
                       </div>
-                    )}
-                    {!efootballMode && (
-                      <div className="space-y-1.5">
-                        <label className="block text-[11px] font-bold text-slate-400">
-                          {uiText(
-                            "هويتك التكتيكية",
-                            "Tactical identity",
-                            "Identidad táctica",
-                            "Identité tactique",
-                          )}
-                        </label>
-                        <div className="grid grid-cols-2 gap-2">
-                          {MY_STYLES.map((style) => (
-                            <button
-                              key={style.value}
-                              type="button"
-                              onClick={() => selectBuildStyleAndAutoShape(style.value)}
-                              className={`p-2.5 rounded-xl text-[10px] text-right border transition-all ${formData.myStyle === style.value ? "bg-violet-600 border-violet-500 text-white font-extrabold shadow-md" : "bg-slate-900/80 border-white/5 text-slate-400 hover:text-white"}`}
-                            >
-                              {optionLabel(style.value, lang)}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    <div className="space-y-2 rounded-2xl border border-violet-500/15 bg-violet-500/5 p-3">
-                      <div>
-                        <h3 className="text-xs font-black text-violet-200">
-                          {uiText("التشكيلات المناسبة لأسلوبك", "Recommended shapes for your style", "Formaciones recomendadas", "Formations recommandées")}
-                        </h3>
-                        <p className="mt-1 text-[10px] text-slate-400 leading-relaxed">
-                          {uiText("لا تختار من كل الخطط. اختر واحدة من الخطط المناسبة للأسلوب المختار فقط.", "Do not choose from every shape. Pick one recommended for the selected style.", "Elige una recomendada.", "Choisissez une formation recommandée.")}
-                        </p>
-                      </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        {recommendedBuildShapes(selectedGame?.id, formData.myStyle).map((shape) => (
+                    </div>
+
+                    <div className="space-y-2">
+                      {guidedBuildIntents().map((intent) => {
+                        const active = normalizeGuidedIntent(formData.notes || selectedGuidedCardId) === intent.id || (!formData.notes && intent.id === "best");
+                        return (
                           <button
-                            key={shape}
+                            key={intent.id}
                             type="button"
-                            onClick={() => selectBuildShape(shape)}
-                            className={`rounded-2xl border p-3 text-right transition ${formData.myFormation === shape ? "bg-violet-600 text-white border-violet-400" : "bg-slate-950/60 text-slate-300 border-white/5"}`}
+                            onClick={() => {
+                              setSelectedGuidedCardId("best");
+                              updateGeneratorForm({
+                                myStyle: intent.style,
+                                notes: `AI_BUILD:${intent.id} | ${intent.title}`,
+                                matchState: uiText("اختيار AI من هدف اللاعب", "AI pick from player goal", "IA objetivo", "IA objectif"),
+                              }, true);
+                              const rec = makeGuidedRecommendations("build")[0];
+                              setTimeout(() => applyGuidedRecommendation({ ...rec, style: intent.style, notes: `AI_BUILD:${intent.id} | ${intent.title} | VARIANT:BEST` }), 0);
+                            }}
+                            className={`w-full rounded-3xl border p-4 text-right transition ${active ? "bg-emerald-500/15 border-emerald-400/35 shadow-lg shadow-emerald-900/10" : "bg-slate-950/55 border-white/5 hover:border-emerald-400/20"}`}
                           >
-                            <div className="text-sm font-black">{shape}</div>
-                            <div className="mt-1 text-[10px] opacity-80">
-                              {optionLabel(formData.myStyle, lang)}
+                            <div className="flex items-center justify-between gap-3">
+                              <span className="h-9 w-9 rounded-2xl bg-emerald-400/10 border border-emerald-400/20 flex items-center justify-center text-[10px] font-black text-emerald-300">AI</span>
+                              <div className="flex-1">
+                                <div className="text-sm font-black text-white">{intent.title}</div>
+                                <div className="mt-1 text-[11px] text-slate-400">{intent.desc}</div>
+                              </div>
                             </div>
                           </button>
-                        ))}
+                        );
+                      })}
+                    </div>
+
+                    <div className="rounded-3xl border border-violet-500/20 bg-violet-950/10 p-4 space-y-3">
+                      <div>
+                        <h3 className="text-sm font-black text-violet-200">
+                          {uiText("اختيارات مقترحة من المدرب", "Coach recommendations", "Recomendaciones", "Recommandations")}
+                        </h3>
+                        <p className="mt-1 text-[10px] text-slate-400 leading-relaxed">
+                          {uiText("اختَر كارت واحد فقط. بعدها ستظهر السبورة والتفاصيل التنفيذية.", "Choose only one card. The board and execution details will follow.", "Elige una.", "Choisissez une.")}
+                        </p>
                       </div>
+                      {makeGuidedRecommendations("build").map((rec) => {
+                        const active = selectedGuidedCardId === rec.id;
+                        return (
+                          <button
+                            key={rec.id}
+                            type="button"
+                            onClick={() => applyGuidedRecommendation(rec)}
+                            className={`w-full rounded-3xl border p-4 text-right transition ${active ? "bg-gradient-to-r from-violet-600 to-fuchsia-600 border-violet-300 text-white shadow-xl" : "bg-slate-950/65 border-white/5 text-slate-300 hover:border-violet-400/30"}`}
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <div className="text-sm font-black">{rec.title}</div>
+                                <div className="mt-3 text-lg font-black text-emerald-300">{optionLabel(rec.style, lang)}</div>
+                                <div className="mt-1 text-[11px] opacity-80 leading-relaxed">{rec.reason}</div>
+                              </div>
+                              <div className="text-left">
+                                <span className="inline-flex rounded-2xl bg-white/10 px-3 py-1 text-[10px] font-black">{rec.badge}</span>
+                                <div className="mt-4 text-xl font-black font-mono">{rec.formation}</div>
+                              </div>
+                            </div>
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    <div className="rounded-2xl border border-rose-500/15 bg-rose-500/5 p-3">
-                      <h3 className="text-sm font-black text-rose-300">
-                        {uiText(
-                          "بيانات الخصم فقط",
-                          "Opponent data only",
-                          "Datos del rival",
-                          "Données adverses",
-                        )}
+                    <div className="rounded-3xl border border-rose-400/20 bg-gradient-to-br from-rose-500/10 to-violet-500/5 p-4">
+                      <div className="flex items-start gap-3">
+                        <div className="h-10 w-10 rounded-2xl bg-rose-400/10 border border-rose-400/20 flex items-center justify-center text-rose-200 shrink-0">
+                          <Target size={18} />
+                        </div>
+                        <div>
+                          <h3 className="text-base font-black text-rose-200">
+                            {uiText("احكيلي خصمك بيلعب إزاي", "Tell me how your rival plays", "Cuéntame el rival", "Décris l’adversaire")}
+                          </h3>
+                          <p className="mt-1 text-[11px] text-slate-400 leading-relaxed">
+                            {uiText("مش محتاج تختار خطتك. اختار المشكلة أو اكتبها، والمدرب يطلع لك خطة مضادة.", "No need to choose your tactic. Pick or write the problem and the coach gives you a counter plan.", "Elige problema.", "Choisissez le problème.")}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      {counterProblemOptions().map((problem) => {
+                        const active = formData.notes.includes(problem.id) || formData.opponentStyle === problem.text;
+                        return (
+                          <button
+                            key={problem.id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedGuidedCardId("best");
+                              updateGeneratorForm({
+                                opponentStyle: problem.text,
+                                matchState: uiText("خصم محدد بالـ AI", "AI described rival", "Rival IA", "Adversaire IA"),
+                                notes: `AI_COUNTER:${problem.id} | ${problem.text}`,
+                              }, false);
+                              const rec = makeGuidedRecommendations("counter")[0];
+                              setTimeout(() => applyGuidedRecommendation({ ...rec, notes: `AI_COUNTER:${problem.id} | ${problem.text} | VARIANT:BEST` }), 0);
+                            }}
+                            className={`rounded-2xl border p-3 text-right text-[11px] font-black transition ${active ? "bg-rose-500/15 border-rose-400/35 text-white" : "bg-slate-950/60 border-white/5 text-slate-300 hover:border-rose-400/25"}`}
+                          >
+                            {problem.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="block text-[11px] font-bold text-slate-400">
+                        {uiText("ملاحظة الخصم الاختيارية", "Optional rival note", "Nota opcional", "Note facultative")}
+                      </label>
+                      <textarea
+                        rows={2}
+                        value={formData.notes.replace(/^AI_COUNTER:[^|]+\|\s*/i, "")}
+                        onChange={(e) => {
+                          setSelectedGuidedCardId("best");
+                          updateGeneratorForm({
+                            notes: `AI_COUNTER:custom | ${e.target.value}`,
+                            opponentStyle: e.target.value || formData.opponentStyle,
+                          }, false);
+                        }}
+                        placeholder={uiText("مثال: بيضغط جامد وبيلعب كرات طويلة للجناح الأيمن", "Example: presses hard and plays long balls to the right wing", "Ejemplo...", "Exemple...")}
+                        className="w-full rounded-2xl bg-slate-950/60 border border-white/8 px-3 py-2 text-xs text-slate-100 placeholder-slate-600 outline-none focus:border-rose-500"
+                      />
+                    </div>
+
+                    <div className="rounded-3xl border border-violet-500/20 bg-violet-950/10 p-4 space-y-3">
+                      <div>
+                        <h3 className="text-sm font-black text-violet-200">
+                          {uiText("الخطة المضادة المقترحة", "Suggested counter plans", "Contras sugeridas", "Contres proposés")}
+                        </h3>
+                        <p className="mt-1 text-[10px] text-slate-400 leading-relaxed">
+                          {uiText("اختَر كارت واحد: أفضل حل، حل آمن، أو حل هجومي.", "Pick one card: best, safe or aggressive.", "Elige una.", "Choisissez une.")}
+                        </p>
+                      </div>
+                      {makeGuidedRecommendations("counter").map((rec) => {
+                        const active = selectedGuidedCardId === rec.id;
+                        return (
+                          <button
+                            key={rec.id}
+                            type="button"
+                            onClick={() => applyGuidedRecommendation(rec)}
+                            className={`w-full rounded-3xl border p-4 text-right transition ${active ? "bg-gradient-to-r from-violet-600 to-fuchsia-600 border-violet-300 text-white shadow-xl" : "bg-slate-950/65 border-white/5 text-slate-300 hover:border-violet-400/30"}`}
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <div className="text-sm font-black">{rec.title}</div>
+                                <div className="mt-3 text-lg font-black text-emerald-300">{optionLabel(rec.style, lang)}</div>
+                                <div className="mt-1 text-[11px] opacity-80 leading-relaxed">{rec.reason}</div>
+                              </div>
+                              <div className="text-left">
+                                <span className="inline-flex rounded-2xl bg-white/10 px-3 py-1 text-[10px] font-black">{rec.badge}</span>
+                                <div className="mt-4 text-xl font-black font-mono">{rec.formation}</div>
+                              </div>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    <div className="rounded-3xl border border-amber-400/20 bg-amber-950/10 p-4 space-y-3">
+                      <h3 className="text-sm font-black text-amber-200 flex items-center gap-2">
+                        <Zap size={15} />
+                        {uiText("إنقاذ سريع أثناء المباراة", "Live match rescue", "Rescate en vivo", "Sauvetage en match")}
                       </h3>
-                      <p className="mt-1 text-[11px] text-slate-400 leading-relaxed">
-                        {uiText(
-                          "لا تختار خطتك هنا. أدخل خطة الخصم وأسلوبه وسنولد الخطة المضادة تلقائيًا.",
-                          "Do not choose your tactic here. Enter the rival shape/style and we generate the counter automatically.",
-                          "No elijas tu táctica aquí.",
-                          "Ne choisissez pas votre tactique ici.",
-                        )}
-                      </p>
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="block text-[11px] font-bold text-slate-400">
-                        {t.oppFormationLabel}
-                      </label>
-                      <div className="grid grid-cols-5 gap-1.5">
-                        {[
-                          "4-2-3-1",
-                          "4-3-3",
-                          "4-2-1-3",
-                          "4-4-2",
-                          "3-5-2",
-                          "5-3-2",
-                          "3-4-3",
-                          "5-4-1",
-                          "3-2-4-1",
-                          "4-3-1-2",
-                        ].map((f) => (
-                          <button
-                            key={f}
-                            type="button"
-                            onClick={() =>
-                              updateGeneratorForm({ oppFormation: f })
-                            }
-                            className={`py-2 rounded-lg text-[10px] font-bold border transition ${formData.oppFormation === f ? "bg-violet-600 border-violet-500 text-white font-extrabold shadow-md" : "bg-slate-900/80 border-white/5 text-slate-400 hover:text-white"}`}
-                          >
-                            {f}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="block text-[11px] font-bold text-slate-400">
-                        {t.oppPlaystyleLabel}
-                      </label>
                       <div className="grid grid-cols-2 gap-2">
-                        {OPPONENT_STYLES.map((style) => (
+                        {liveRescueOptions().map((item) => (
                           <button
-                            key={style.value}
+                            key={item}
                             type="button"
-                            onClick={() =>
-                              updateGeneratorForm(
-                                { opponentStyle: style.value },
-                                false,
-                              )
-                            }
-                            className={`p-2.5 rounded-xl text-[10px] text-right border transition-all ${formData.opponentStyle === style.value ? "bg-violet-600 border-violet-500 text-white font-extrabold shadow-md" : "bg-slate-900/80 border-white/5 text-slate-400 hover:text-white"}`}
+                            onClick={() => {
+                              setLiveRescueScenario(item);
+                              updateGeneratorForm({ matchState: item, notes: `${formData.notes} | LIVE_RESCUE:${item}` }, false);
+                            }}
+                            className={`rounded-2xl border p-2 text-[10px] font-black transition ${liveRescueScenario === item ? "bg-amber-400/20 border-amber-300/40 text-amber-100" : "bg-slate-950/60 border-white/5 text-slate-300"}`}
                           >
-                            {optionLabel(style.value, lang)}
+                            {item}
                           </button>
                         ))}
                       </div>
-                    </div>
-                    <div className="space-y-1">
-                      <label className="block text-[11px] font-bold text-slate-400">
-                        {t.matchScenarioLabel}
-                      </label>
-                      <select
-                        value={formData.matchState}
-                        onChange={(e) =>
-                          updateGeneratorForm(
-                            { matchState: e.target.value },
-                            false,
-                          )
-                        }
-                        className="w-full bg-slate-900/80 border border-white/5 rounded-xl px-3 py-2.5 text-xs text-slate-100 outline-none focus:border-violet-600"
-                      >
-                        {MATCH_STATES.map((ms) => (
-                          <option key={ms.value} value={ms.value}>
-                            {optionLabel(ms.value, lang)}
-                          </option>
-                        ))}
-                      </select>
                     </div>
                   </div>
                 )}
@@ -6103,7 +7188,7 @@ ${currentResult.playerInstructions.map((i) => `• ${i}`).join("\n")}
                           )}
                         </div>
                         <div className="text-lg font-black text-emerald-300 font-mono">
-                          {currentResult.confidence}
+                          {`${safePercent(currentResult.confidence, 86)}%`}
                         </div>
                       </div>
                       <div className="rounded-2xl border border-violet-400/25 bg-violet-500/10 p-2 text-center">
@@ -6111,15 +7196,15 @@ ${currentResult.playerInstructions.map((i) => `• ${i}`).join("\n")}
                           {uiText("التقييم", "Score", "Puntuación", "Score")}
                         </div>
                         <div className="text-lg font-black text-white font-mono">
-                          {resultTacticalScore}
+                          {`${safeScore10(currentResult.score ?? currentResult.rating, resultTacticalScore).toFixed(1)}/10`}
                         </div>
                       </div>
                     </div>
                   </div>
                   <div className="mt-3 rounded-2xl bg-black/20 border border-white/5 p-3 text-[11px] text-slate-300 leading-relaxed">
                     {uiText(
-                      "هذه الصفحة تعرض ما تطبقه داخل اللعبة فقط. الشرح المتقدم موجود في زر شرح التكتيك.",
-                      "This page shows only what to apply in-game. Advanced reasoning is inside Explain tactic.",
+                      "هذه الصفحة تعرض القيم والتعليمات التي تطبقها داخل اللعبة فقط.",
+                      "This page shows only the values and instructions you apply in-game.",
                       "Esta página muestra solo lo que aplicas en el juego.",
                       "Cette page affiche seulement ce à appliquer en jeu.",
                     )}
@@ -6239,26 +7324,7 @@ ${currentResult.playerInstructions.map((i) => `• ${i}`).join("\n")}
                   )}
                 </div>
 
-                <div className="rounded-3xl border border-amber-400/15 bg-amber-950/10 p-4 space-y-3">
-                  <h3 className="text-sm font-black text-amber-200">
-                    {uiText(
-                      "3 أوامر فورية داخل المباراة",
-                      "3 immediate in-match orders",
-                      "3 órdenes inmediatas",
-                      "3 consignes immédiates",
-                    )}
-                  </h3>
-                  <div className="space-y-2">
-                    {actionPlan.direct.match.slice(0, 3).map((item, index) => (
-                      <div
-                        key={index}
-                        className="rounded-2xl bg-slate-950/55 border border-white/5 px-3 py-2 text-[11px] font-bold text-slate-100"
-                      >
-                        {index + 1}. {cleanTacticText(item)}
-                      </div>
-                    ))}
-                  </div>
-                </div>
+                {/* Removed noisy immediate match-orders block: duplicated advanced instructions and crowded the result page. */}
 
                 <div className="rounded-3xl border border-cyan-400/15 bg-cyan-950/10 p-4 space-y-3">
                   <h3 className="text-sm font-black text-cyan-200 flex items-center gap-2">
@@ -6278,6 +7344,23 @@ ${currentResult.playerInstructions.map((i) => `• ${i}`).join("\n")}
                       "Ajoutez une note.",
                     )}
                   </p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      uiText("هل تنفع ضد الضغط العالي؟", "Does it work against high press?", "¿Sirve contra presión alta?", "Ça marche contre pressing haut ?"),
+                      uiText("إيه أول تعديل لو اتأخرت؟", "First tweak if I go behind?", "Primer ajuste si pierdo?", "Premier ajustement si je perds ?"),
+                      uiText("إيه نقطة ضعف الخطة؟", "What is the weak point?", "Punto débil?", "Point faible ?"),
+                      uiText("اعمل نسخة آمنة", "Make a safer version", "Versión segura", "Version sûre"),
+                    ].map((q) => (
+                      <button
+                        key={q}
+                        type="button"
+                        onClick={() => setCoachQuestion(q)}
+                        className="rounded-2xl border border-cyan-400/15 bg-cyan-500/10 px-3 py-2 text-[10px] font-black text-cyan-100 text-right"
+                      >
+                        {q}
+                      </button>
+                    ))}
+                  </div>
                   <textarea
                     rows={2}
                     value={coachQuestion}
@@ -6322,196 +7405,133 @@ ${currentResult.playerInstructions.map((i) => `• ${i}`).join("\n")}
                       ))}
                     </div>
                   )}
+                  {!!coachConflicts.length && (
+                    <div className="rounded-2xl border border-amber-400/20 bg-amber-950/10 p-3 space-y-1">
+                      <div className="text-[10px] font-black text-amber-200">
+                        {uiText("تنبيهات تكتيكية", "Tactical warnings", "Alertas", "Alertes")}
+                      </div>
+                      {coachConflicts.map((item, index) => (
+                        <div key={index} className="text-[10px] text-slate-200 leading-relaxed">• {item}</div>
+                      ))}
+                    </div>
+                  )}
+                  {!!coachQuickActions.length && (
+                    <div className="grid grid-cols-1 gap-2">
+                      {coachQuickActions.map((item, index) => (
+                        <div key={index} className="rounded-2xl border border-cyan-400/20 bg-cyan-500/10 px-3 py-2 text-[10px] font-black text-cyan-100">
+                          ⚡ {item}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 <div className="rounded-3xl border border-white/8 bg-white/[0.04] p-4 space-y-3">
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <h3 className="text-sm font-black text-white">
-                        {uiText(
-                          "السبورة التنفيذية",
-                          "Execution board",
-                          "Pizarra de ejecución",
-                          "Tableau d’exécution",
-                        )}
+                        {uiText("السبورة التنفيذية", "Execution board", "Pizarra de ejecución", "Tableau d’exécution")}
                       </h3>
                       <p className="text-[10px] text-slate-400 mt-1">
-                        {uiText(
-                          "اضغط لفتح التمركز والتحريك والرسم.",
-                          "Open for movement, drawing and adjustments.",
-                          "Abrir para mover y dibujar.",
-                          "Ouvrir pour déplacer et dessiner.",
-                        )}
+                        {uiText("افتحها عند الحاجة فقط للحفاظ على النتيجة مختصرة وواضحة.", "Open only when needed to keep the result clean.", "Ábrela solo cuando haga falta.", "Ouvrez uniquement si nécessaire.")}
                       </p>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 shrink-0">
                       <button
                         type="button"
-                        onClick={() =>
-                          setShowOpponentOnBoard(!showOpponentOnBoard)
-                        }
-                        className="rounded-2xl bg-white/5 border border-white/10 text-white text-[10px] font-black px-3 py-2"
-                      >
-                        {showOpponentOnBoard
-                          ? uiText(
-                              "إخفاء الخصم",
-                              "Hide rival",
-                              "Ocultar",
-                              "Masquer",
-                            )
-                          : uiText(
-                              "إظهار الخصم",
-                              "Show rival",
-                              "Mostrar",
-                              "Afficher",
-                            )}
-                      </button>
-                      <button
-                        onClick={() => setScreen("sandbox-board")}
+                        onClick={() => setShowExecutionBoard(!showExecutionBoard)}
                         className="rounded-2xl bg-violet-600 hover:bg-violet-500 text-white text-[11px] font-black px-4 py-2"
                       >
-                        {uiText(
-                          "تعديل السبورة",
-                          "Edit board",
-                          "Editar",
-                          "Modifier",
-                        )}
+                        {showExecutionBoard
+                          ? uiText("إخفاء السبورة", "Hide board", "Ocultar", "Masquer")
+                          : uiText("إظهار السبورة", "Show board", "Mostrar", "Afficher")}
                       </button>
                     </div>
                   </div>
-                  <div className="max-h-[260px] overflow-hidden rounded-2xl border border-white/5 bg-slate-950/40 pointer-events-none">
-                    <TacticalBoard
-                      formation={currentResult.formation}
-                      opponentFormation={formData.oppFormation}
-                      lang={lang}
-                      value={boardState}
-                      readOnly
-                      showOpponent={showOpponentOnBoard}
-                      compact
-                    />
-                  </div>
+
+                  {showExecutionBoard && (
+                    <div className="space-y-3 animate-fade-in">
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!guardFeature("advanced_board")) return;
+                            setShowOpponentOnBoard(!showOpponentOnBoard);
+                          }}
+                          className={`rounded-2xl border text-[10px] font-black px-3 py-2 ${canUseProgressionFeature("advanced_board") ? "bg-white/5 border-white/10 text-white" : "bg-slate-900/70 border-white/5 text-slate-500"}` }
+                        >
+                          {showOpponentOnBoard
+                            ? uiText("إخفاء الخصم", "Hide rival", "Ocultar", "Masquer")
+                            : uiText("إظهار الخصم", "Show rival", "Mostrar", "Afficher")}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!guardFeature("board_ai_read")) return;
+                            setShowBoardScan(!showBoardScan);
+                          }}
+                          className={`rounded-2xl border text-[10px] font-black px-3 py-2 flex items-center gap-1.5 ${canUseProgressionFeature("board_ai_read") ? "bg-emerald-500/10 border-emerald-300/20 text-emerald-100" : "bg-slate-900/70 border-white/5 text-slate-500"}` }
+                        >
+                          <Brain size={13} />
+                          {showBoardScan
+                            ? uiText("إخفاء قراءة AI", "Hide AI scan", "Ocultar IA", "Masquer IA")
+                            : uiText("قراءة AI للسبورة", "AI board scan", "Lectura IA", "Lecture IA")}
+                        </button>
+                        <button
+                          onClick={() => setScreen("sandbox-board")}
+                          className="rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 text-white text-[10px] font-black px-3 py-2"
+                        >
+                          {uiText("تعديل السبورة", "Edit board", "Editar", "Modifier")}
+                        </button>
+                      </div>
+                      {(!canUseProgressionFeature("board_ai_read") || !canUseProgressionFeature("advanced_board")) && (
+                        <div className="rounded-2xl border border-amber-300/15 bg-amber-500/8 px-3 py-2 text-[10px] font-bold text-amber-100">
+                          {uiText("ارفع XP لفتح قراءة AI وإظهار الخصم داخل السبورة.", "Earn XP to unlock AI scan and rival layer on the board.", "Gana XP para abrir IA y rival.", "Gagnez de l’XP pour débloquer IA et adversaire.")}
+                        </div>
+                      )}
+                      <div className="max-h-[230px] overflow-hidden rounded-2xl border border-white/5 bg-slate-950/40 pointer-events-none">
+                        <TacticalBoard
+                          formation={currentResult.formation}
+                          opponentFormation={formData.oppFormation}
+                          lang={lang}
+                          value={getLockedBoardState()}
+                          readOnly
+                          showOpponent={showOpponentOnBoard}
+                          compact
+                        />
+                      </div>
+                      {showBoardScan && (
+                        <div className="rounded-3xl border border-emerald-400/15 bg-emerald-950/10 p-4 space-y-3">
+                          <h3 className="text-sm font-black text-emerald-200 flex items-center gap-2">
+                            <Brain size={16} />
+                            {uiText("قراءة AI للسبورة", "AI board scan", "Lectura IA de pizarra", "Lecture IA du tableau")}
+                          </h3>
+                          <div className="grid grid-cols-1 gap-2 text-[11px]">
+                            {(currentResult.boardAnalysis?.length ? currentResult.boardAnalysis : [
+                              uiText("توزيع فريقك متوازن مبدئيًا ويمكن البناء عليه.", "Your shape is balanced enough to build on.", "Distribución equilibrada.", "Structure équilibrée."),
+                              uiText("راقب المسافة بين المحور وصانع اللعب قبل رفع الظهيرين.", "Watch the DM-AM gap before pushing both fullbacks.", "Vigila la distancia central.", "Surveillez l’écart milieu-créateur."),
+                            ]).slice(0, 3).map((item, index) => (
+                              <div key={index} className="rounded-2xl border border-emerald-400/10 bg-slate-950/55 px-3 py-2 text-slate-100 font-bold">
+                                {index + 1}. {cleanTacticText(item)}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
-                <div className="rounded-3xl border border-amber-400/15 bg-amber-950/10 p-4 space-y-3">
-                  <h3 className="text-sm font-black text-amber-200 flex items-center gap-2">
-                    <Award size={16} />
-                    {uiText(
-                      "تعليمات اللعب المباشر",
-                      "Match instructions",
-                      "Instrucciones de partido",
-                      "Consignes de match",
-                    )}
-                  </h3>
-                  <div className="grid grid-cols-1 gap-2 text-xs">
-                    <div className="rounded-2xl bg-slate-950/55 border border-white/5 p-3 text-slate-100 leading-relaxed">
-                      {cleanTacticText(actionPlan.inGame)}
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="rounded-2xl border border-emerald-400/15 bg-emerald-950/20 p-3">
-                        <div className="text-[10px] text-emerald-200 font-black mb-1">
-                          {uiText(
-                            "لو متقدم",
-                            "If leading",
-                            "Si vas ganando",
-                            "Si vous menez",
-                          )}
-                        </div>
-                        <p className="text-[10px] text-slate-300 leading-relaxed">
-                          {cleanTacticText(actionPlan.protect)}
-                        </p>
-                      </div>
-                      <div className="rounded-2xl border border-rose-400/15 bg-rose-950/20 p-3">
-                        <div className="text-[10px] text-rose-200 font-black mb-1">
-                          {uiText(
-                            "لو متأخر",
-                            "If trailing",
-                            "Si vas perdiendo",
-                            "Si vous êtes mené",
-                          )}
-                        </div>
-                        <p className="text-[10px] text-slate-300 leading-relaxed">
-                          {cleanTacticText(actionPlan.emergency)}
-                        </p>
-                      </div>
-                    </div>
+                <div className="rounded-2xl border border-fuchsia-400/20 bg-slate-950/70 p-3 flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="text-[10px] font-black text-fuchsia-200 uppercase tracking-widest">TACTIC BOSS AI</div>
+                    <div className="text-xs font-black text-white truncate">{uiText("شارك الخطة كصورة", "Share tactic image", "Compartir imagen", "Partager l’image")}</div>
                   </div>
+                  <button type="button" onClick={shareTacticInfo} className="rounded-xl bg-fuchsia-600 hover:bg-fuchsia-500 text-white text-xs font-black px-4 py-2.5 flex items-center justify-center gap-2 shrink-0">
+                    <Share2 size={15}/>
+                    {uiText("شارك", "Share", "Compartir", "Partager")}
+                  </button>
                 </div>
-
-                <button
-                  type="button"
-                  onClick={() => setShowAdvancedPlan(!showAdvancedPlan)}
-                  className="w-full rounded-2xl border border-white/8 bg-white/[0.04] px-4 py-3 text-xs font-black text-slate-200 flex items-center justify-between"
-                >
-                  <span>
-                    {uiText(
-                      "شرح التكتيك والتفاصيل المتقدمة",
-                      "Explain tactic and advanced details",
-                      "Explicar táctica",
-                      "Expliquer la tactique",
-                    )}
-                  </span>
-                  <ChevronDown
-                    size={16}
-                    className={
-                      showAdvancedPlan ? "rotate-180 transition" : "transition"
-                    }
-                  />
-                </button>
-
-                {showAdvancedPlan && (
-                  <div className="rounded-3xl border border-white/8 bg-slate-950/55 p-4 space-y-3 text-xs text-slate-300 leading-relaxed">
-                    <div>
-                      <b className="text-violet-300">
-                        {uiText("لماذا؟", "Why?", "¿Por qué?", "Pourquoi ?")}
-                      </b>
-                      <p className="mt-1">{actionPlan.why}</p>
-                    </div>
-                    <div>
-                      <b className="text-rose-300">
-                        {uiText("احذر", "Watch out", "Cuidado", "Attention")}
-                      </b>
-                      <p className="mt-1">{actionPlan.weakness}</p>
-                    </div>
-                    {!!currentResult.boardAnalysis?.length && (
-                      <div>
-                        <b className="text-emerald-300">
-                          {uiText(
-                            "قراءة السبورة",
-                            "Board reading",
-                            "Lectura de pizarra",
-                            "Lecture tableau",
-                          )}
-                        </b>
-                        <ul className="mt-2 space-y-1">
-                          {currentResult.boardAnalysis
-                            .slice(0, 4)
-                            .map((x, i) => (
-                              <li key={i}>• {cleanTacticText(x)}</li>
-                            ))}
-                        </ul>
-                      </div>
-                    )}
-                    {!!currentResult.mistakesToAvoid?.length && (
-                      <div>
-                        <b className="text-amber-300">
-                          {uiText(
-                            "أخطاء شائعة",
-                            "Common mistakes",
-                            "Errores comunes",
-                            "Erreurs communes",
-                          )}
-                        </b>
-                        <ul className="mt-2 space-y-1">
-                          {currentResult.mistakesToAvoid
-                            .slice(0, 4)
-                            .map((x, i) => (
-                              <li key={i}>• {cleanTacticText(x)}</li>
-                            ))}
-                        </ul>
-                      </div>
-                    )}
-                  </div>
-                )}
 
                 <div className="grid grid-cols-[1fr_auto_auto] gap-2 sticky bottom-20 z-20">
                   <button
@@ -6587,8 +7607,16 @@ ${currentResult.playerInstructions.map((i) => `• ${i}`).join("\n")}
                       setSelectedGame(
                         GAMES_LIST.find((g) => g.name === item.game) || null,
                       );
-                      setCurrentResult(item.result);
-                      setBoardState(item.board || null);
+                      const locked = lockFinalPlanResult(item.result, item.board || item.result.finalBoard || null, {
+                        sourceTool: "library",
+                        game: item.game,
+                        language: lang,
+                        formation: item.myFormation,
+                        playstyle: item.myStyle,
+                        confidenceFallback: resultTacticalScore,
+                      });
+                      setCurrentResult(locked.result);
+                      setBoardState(locked.board);
                       setFormData({
                         myFormation: item.myFormation,
                         oppFormation: item.oppFormation,
@@ -7319,6 +8347,29 @@ ${currentResult.playerInstructions.map((i) => `• ${i}`).join("\n")}
               </div>
             </div>
 
+
+            <div className="glass-card rounded-2xl p-4 space-y-3 border border-emerald-400/15 bg-emerald-500/5">
+              <div className="flex items-center gap-2">
+                <Crown size={16} className="text-emerald-300" />
+                <h3 className="text-xs font-black text-white">
+                  {uiText("توزيع مزايا Free / Pro / Elite", "Free / Pro / Elite feature map", "Mapa de planes", "Carte des offres")}
+                </h3>
+              </div>
+              {[
+                ["Free", uiText("تجربة يومية خفيفة", "Daily light trial", "Prueba diaria", "Essai quotidien"), uiText("3 AI Counter يوميًا • 2 Live Rescue • مشاركة نصية • تحليل مباراة واحد", "3 AI Counters/day • 2 Live Rescues • text share • 1 match analysis", "3 counters/día", "3 contres/jour")],
+                ["Pro", uiText("قلب المنتج الحقيقي", "The real product core", "Núcleo Pro", "Cœur Pro"), uiText("Unlimited AI Counter تقريبًا • Share Cards • Deep Board Scan • حفظ خصوم أكثر", "High AI limits • Share Cards • Deep Board Scan • more saved rivals", "Límites altos", "Limites élevées")],
+                ["Elite", uiText("مدرب نخبة كامل", "Full elite coach", "Coach élite", "Coach élite"), uiText("كل شيء بلا حدود تقريبًا • AI Memory • تقارير Elite • أولوية مزايا جديدة", "Near-unlimited • AI Memory • elite reports • priority features", "Casi ilimitado", "Quasi illimité")],
+              ].map(([name, title, desc]) => (
+                <div key={name} className="rounded-2xl border border-white/8 bg-slate-950/50 p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <b className="text-sm text-white">{name}</b>
+                    <span className="text-[10px] font-black text-emerald-300">{title}</span>
+                  </div>
+                  <p className="mt-1 text-[10px] leading-relaxed text-slate-400">{desc}</p>
+                </div>
+              ))}
+            </div>
+
             <div className="glass-card rounded-2xl p-4 space-y-3 border border-amber-400/20 bg-amber-500/5">
               <div className="flex items-start justify-between gap-3">
                 <div>
@@ -7462,8 +8513,8 @@ ${currentResult.playerInstructions.map((i) => `• ${i}`).join("\n")}
                 <div>
                   ✓{" "}
                   {uiText(
-                    "مولد الخطط والسبورة الأساسية",
-                    "Core generator and tactical board",
+                    "3 AI Counter Rescue يوميًا + سبورة أساسية",
+                    "3 AI Counter Rescues/day + basic board",
                     "Generador y pizarra básicos",
                     "Générateur et tableau de base",
                   )}
@@ -7522,8 +8573,8 @@ ${currentResult.playerInstructions.map((i) => `• ${i}`).join("\n")}
                 <div>
                   ✓{" "}
                   {uiText(
-                    "Meta Center كامل",
-                    "Full Meta Center",
+                    "AI Counter شبه غير محدود + Share Cards",
+                    "High-limit AI Counter + Share Cards",
                     "Meta Center completo",
                     "Meta Center complet",
                   )}
@@ -7531,8 +8582,8 @@ ${currentResult.playerInstructions.map((i) => `• ${i}`).join("\n")}
                 <div>
                   ✓{" "}
                   {uiText(
-                    "تطوير خطتي وتقارير أسبوعية",
-                    "Improve My Tactic and weekly reports",
+                    "Deep Board Scan + Analyze Match متقدم",
+                    "Deep Board Scan + advanced Match Analysis",
                     "Mejora de táctica e informes semanales",
                     "Développement tactique et rapports hebdomadaires",
                   )}
@@ -7595,8 +8646,8 @@ ${currentResult.playerInstructions.map((i) => `• ${i}`).join("\n")}
                 <div>
                   ✓{" "}
                   {uiText(
-                    "أعلى حدود استخدام متاحة",
-                    "Highest available usage limits",
+                    "استخدام شبه غير محدود لكل أدوات AI",
+                    "Near-unlimited usage across AI tools",
                     "Límites de uso más altos",
                     "Limites d’utilisation maximales",
                   )}
@@ -7604,8 +8655,8 @@ ${currentResult.playerInstructions.map((i) => `• ${i}`).join("\n")}
                 <div>
                   ✓{" "}
                   {uiText(
-                    "كل مزايا Pro وتقارير النخبة",
-                    "All Pro features and elite reports",
+                    "AI Memory + Elite tactical reports",
+                    "AI Memory + elite tactical reports",
                     "Todas las funciones Pro",
                     "Toutes les fonctions Pro",
                   )}
@@ -7907,7 +8958,7 @@ ${currentResult.playerInstructions.map((i) => `• ${i}`).join("\n")}
           id="tab-settings"
         >
           <Settings size={18} />
-          <span>{t.navSettings}</span>
+          <span>{uiText("حسابي", "Account", "Cuenta", "Compte")}</span>
         </button>
       </div>
     </div>
