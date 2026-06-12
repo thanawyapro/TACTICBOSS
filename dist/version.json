@@ -1,6 +1,6 @@
 {
-  "version": "v105.6-github-netlify-prebuilt-no-npm",
-  "build": "prebuilt-dist-with-functions-no-netlify-npm-install",
+  "version": "v105.7-true-daily-challenge-game-dna",
+  "build": "prebuilt-no-npm-user-app-daily-challenge-game-dna",
   "requiresClearCache": true,
-  "notes": "V105.6 is a GitHub-to-Netlify prebuilt package. It includes the already-built dist folder and Netlify Functions, removes package.json from the deploy root, and uses an echo build command so Netlify does not run npm install or Vite build."
+  "notes": "V105.7 turns Daily Challenge into a real playable tactical challenge with score/XP evaluation, clarifies Smart AI Plan, and adds Game DNA logic for PES classic, modern eFootball, and EA FC/FIFA flows."
 }

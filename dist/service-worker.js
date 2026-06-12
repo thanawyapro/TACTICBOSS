@@ -1,5 +1,5 @@
-const CACHE = 'tactic-boss-v105.6-6-prebuilt-no-npm';
-const APP_SHELL = ['/', '/index.html', '/manifest.json?v=105', '/offline.html', '/version.json'];
+const CACHE = 'tactic-boss-v105-7-true-daily-challenge-game-dna';
+const APP_SHELL = ['/', '/index.html', '/manifest.json?v=1057', '/offline.html', '/version.json'];
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(APP_SHELL)).then(() => self.skipWaiting()));
 });
