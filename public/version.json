@@ -1,6 +1,6 @@
 {
-  "version": "v105.4-github-netlify-vite-hard-lock",
-  "build": "github-netlify-guaranteed-build-vite-in-dependencies-cache-repair",
+  "version": "v105.5-github-netlify-web-clean-no-capacitor",
+  "build": "web-only-deploy-removes-capacitor-cli-node-conflict",
   "requiresClearCache": true,
-  "notes": "V105.4 hardens GitHub to Netlify builds: Vite/build tools are production-safe dependencies and the Netlify build command repairs missing/corrupt node_modules before building."
+  "notes": "V105.5 removes Capacitor/mobile-only build tooling from the Netlify web package, keeps Vite in production dependencies, and uses a lightweight production install fallback to avoid Node/npm deploy conflicts."
 }

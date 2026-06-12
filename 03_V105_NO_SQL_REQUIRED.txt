@@ -1,0 +1,6 @@
+-- Tactic Boss AI V105 — Premium Calm Game Hub Home Redesign
+-- No Supabase schema changes are required for this release.
+-- V105 is a frontend UX/navigation/PWA-cache update only.
+-- Keep the V104 Launch Candidate SQL and Admin Console SQL already applied.
+
+select 'v105-no-sql-required' as status;
