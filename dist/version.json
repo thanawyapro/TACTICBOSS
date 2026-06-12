@@ -1,6 +1,6 @@
 {
-  "version": "v106-manager-league-private-codes-game-separation",
-  "build": "prebuilt-no-npm-user-app-manager-league-private-code-game-separated",
+  "version": "v106.1-competition-ux-tactical-manager-match-engine",
+  "build": "prebuilt-no-npm-competition-simplified-manager-squad-result-card",
   "requiresClearCache": true,
-  "notes": "V106 adds a lightweight OSM-style Manager League with private join codes, strict game separation, AI coach fillers, round plans, table scoring, and optional Supabase sync."
+  "notes": "V106.1 simplifies the competition hub and adds Tactical Manager Match Engine MVP with squad power, player instructions, man marking, and a premium match result card without Gemini cost."
 }
