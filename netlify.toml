@@ -1,5 +1,7 @@
 [build]
-  command = "bash scripts/netlify-guaranteed-build.sh"
+  # V105.6 uses a prebuilt dist folder to avoid all Netlify npm install/build failures.
+  # Do not change this to npm run build unless you want Netlify to install dependencies again.
+  command = "echo 'Tactic Boss AI V105.6 prebuilt deploy: no npm install/build required'"
   publish = "dist"
 
 [functions]
@@ -7,11 +9,8 @@
 
 [build.environment]
   NODE_VERSION = "20.19.0"
-  NPM_VERSION = "10.8.2"
-  NPM_CONFIG_AUDIT = "false"
-  NPM_CONFIG_FUND = "false"
   SECRETS_SCAN_OMIT_KEYS = "SUPABASE_URL,SUPABASE_ANON_KEY,OAUTH_REDIRECT_URL"
-  SECRETS_SCAN_OMIT_PATHS = "dist/runtime-config.js,public/runtime-config.js,READ_ME_FIRST_GITHUB_DEPLOY_AR.md"
+  SECRETS_SCAN_OMIT_PATHS = "dist/runtime-config.js,READ_ME_FIRST_V105_6_PREBUILT_AR.md"
 
 [[redirects]]
   from = "/api/vision-analysis"

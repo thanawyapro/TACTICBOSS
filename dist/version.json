@@ -1,0 +1,6 @@
+{
+  "version": "v105.6-github-netlify-prebuilt-no-npm",
+  "build": "prebuilt-dist-with-functions-no-netlify-npm-install",
+  "requiresClearCache": true,
+  "notes": "V105.6 is a GitHub-to-Netlify prebuilt package. It includes the already-built dist folder and Netlify Functions, removes package.json from the deploy root, and uses an echo build command so Netlify does not run npm install or Vite build."
+}

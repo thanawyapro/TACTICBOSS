@@ -1,3 +1,0 @@
--- Tactic Boss AI V102
--- No Supabase SQL migration required.
--- V102 changes are front-end UX, Canvas rendering, board collapse, retention/competition shell, and PWA cache/version updates.
