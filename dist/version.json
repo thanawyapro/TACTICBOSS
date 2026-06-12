@@ -1,6 +1,6 @@
 {
-  "version": "v106.1-competition-ux-tactical-manager-match-engine",
-  "build": "prebuilt-no-npm-competition-simplified-manager-squad-result-card",
+  "version": "v120-trap-arena-ultimate-edition-tactical-breakdown",
+  "build": "prebuilt-no-npm-trap-arena-war-squad-tacticore-tactical-breakdown",
   "requiresClearCache": true,
-  "notes": "V106.1 simplifies the competition hub and adds Tactical Manager Match Engine MVP with squad power, player instructions, man marking, and a premium match result card without Gemini cost."
+  "notes": "V120 converts Competition into Tactic Boss Trap Arena with War Squad, TactiCore, daily trap, friend-code trap flow, tactical breakdown clips, reward reveal, hint confirmation, and simplified premium game identity."
 }
