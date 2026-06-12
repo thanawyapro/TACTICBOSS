@@ -1,14 +1,13 @@
 [build]
-  command = "echo 'Tactic Boss AI V105.7 prebuilt deploy: no npm install/build required'"
+  command = "echo 'Tactic Boss AI V106 prebuilt deploy: no npm install/build required'"
   publish = "dist"
 
 [functions]
   directory = "netlify/functions"
 
 [build.environment]
-  NODE_VERSION = "20.19.0"
   SECRETS_SCAN_OMIT_KEYS = "SUPABASE_URL,SUPABASE_ANON_KEY,OAUTH_REDIRECT_URL"
-  SECRETS_SCAN_OMIT_PATHS = "dist/runtime-config.js,dist/version.json"
+  SECRETS_SCAN_OMIT_PATHS = "dist/runtime-config.js,dist/assets/**,READ_ME_FIRST_V106_PREBUILT_AR.md"
 
 [[redirects]]
   from = "/api/vision-analysis"

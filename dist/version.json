@@ -1,6 +1,6 @@
 {
-  "version": "v105.7-true-daily-challenge-game-dna",
-  "build": "prebuilt-no-npm-user-app-daily-challenge-game-dna",
+  "version": "v106-manager-league-private-codes-game-separation",
+  "build": "prebuilt-no-npm-user-app-manager-league-private-code-game-separated",
   "requiresClearCache": true,
-  "notes": "V105.7 turns Daily Challenge into a real playable tactical challenge with score/XP evaluation, clarifies Smart AI Plan, and adds Game DNA logic for PES classic, modern eFootball, and EA FC/FIFA flows."
+  "notes": "V106 adds a lightweight OSM-style Manager League with private join codes, strict game separation, AI coach fillers, round plans, table scoring, and optional Supabase sync."
 }
