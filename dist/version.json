@@ -1,6 +1,6 @@
 {
-  "version": "v120.1-trap-arena-visible-ui-fix",
-  "build": "prebuilt-no-npm-src-app-sync-trap-arena-war-squad-tacticore-visible-ui",
+  "version": "v123-arena-ultimate-gameplay-transformation",
+  "build": "prebuilt-no-npm-arena-home-training-league-fullscreen-decisive-clips-18-player-squad",
   "requiresClearCache": true,
-  "notes": "V120.1 fixes the previous prebuilt package by syncing the actual compiled src/App.tsx with the Trap Arena UI. Competition now visibly shows Trap Arena, War Squad, TactiCore, Tactical Breakdown, rewards, and simplified game identity."
+  "notes": "V123 rebuilds Competition into a premium Tactic Boss Arena game shell with simplified buttons, 18-player War Squad, Training Center, Arena League, rewards, daily trap flow, full-screen decisive clips, and clearer gameplay UX."
 }
