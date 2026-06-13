@@ -1,5 +1,5 @@
-const CACHE = 'tactic-boss-v123-arena-ultimate-gameplay-transformation';
-const APP_SHELL = ['/', '/index.html', '/manifest.json?v=123', '/offline.html', '/version.json?v=123'];
+const CACHE = 'tactic-boss-v121-launch-transformation';
+const APP_SHELL = ['/', '/index.html', '/manifest.json?v=121', '/offline.html', '/version.json'];
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(APP_SHELL)).then(() => self.skipWaiting()));
 });
@@ -10,7 +10,7 @@ self.addEventListener('fetch', event => {
   const req = event.request;
   if (req.method !== 'GET' || !req.url.startsWith(self.location.origin)) return;
   const url = new URL(req.url);
-  if (url.pathname === '/runtime-config.js' || url.pathname === '/version.json?v=123' || url.pathname === '/manifest.json') {
+  if (url.pathname === '/runtime-config.js' || url.pathname === '/version.json' || url.pathname === '/manifest.json') {
     event.respondWith(fetch(req, { cache: 'no-store' }));
     return;
   }

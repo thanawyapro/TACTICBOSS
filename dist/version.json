@@ -1,6 +1,6 @@
 {
-  "version": "v123-arena-ultimate-gameplay-transformation",
-  "build": "prebuilt-no-npm-arena-home-training-league-fullscreen-decisive-clips-18-player-squad",
+  "version": "v121-launch-transformation-true-game-dna",
+  "build": "prebuilt-no-npm-pes-dna-manual-builder-text-analyst-language-settings",
   "requiresClearCache": true,
-  "notes": "V123 rebuilds Competition into a premium Tactic Boss Arena game shell with simplified buttons, 18-player War Squad, Training Center, Arena League, rewards, daily trap flow, full-screen decisive clips, and clearer gameplay UX."
+  "notes": "V121 separates classic PES tactics from modern eFootball, restores the full manual tactic builder, moves text-first tactical analysis into My Tactics, improves contextual AI coaching, fixes mixed-language labels, and restructures account settings for launch."
 }

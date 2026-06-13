@@ -1,5 +1,5 @@
 [build]
-  command = "echo 'Tactic Boss AI V123 prebuilt deploy: no npm install/build required'"
+  command = "echo 'Tactic Boss AI V121 prebuilt deploy: no npm install/build required'"
   publish = "dist"
 
 [functions]
@@ -7,7 +7,7 @@
 
 [build.environment]
   SECRETS_SCAN_OMIT_KEYS = "SUPABASE_URL,SUPABASE_ANON_KEY,OAUTH_REDIRECT_URL"
-  SECRETS_SCAN_OMIT_PATHS = "dist/runtime-config.js,public/runtime-config.js,READ_ME_FIRST_V123_PREBUILT_AR.md"
+  SECRETS_SCAN_OMIT_PATHS = "dist/runtime-config.js,READ_ME_FIRST_V121_PREBUILT_AR.md"
 
 [[redirects]]
   from = "/api/vision-analysis"
