@@ -1,6 +1,6 @@
 {
-  "version": "v131.1-web-production-final-hard-verification-ui-meta-language-fixes",
-  "build": "github-netlify-prebuilt-no-npm-v131-1-hard-verification",
+  "version": "v131.2-web-production-final-tactics-settings-ux-hardfix",
+  "build": "github-netlify-prebuilt-no-npm-v131-2-tactics-settings-ux",
   "requiresClearCache": true,
-  "notes": "V131.1 fixes duplicate home shortcuts, duplicate board/share controls, restores Meta Center rendering, cleans Arabic labels and raw AI markers, makes the preferred game selector visible from the top bar, and requires target players for advanced instructions."
+  "notes": "V131.2 rebuilds the manual tactic settings UX into clear tabs, verifies game-specific settings, improves PES sliders, eFootball player-targeted instructions, FC IQ/legacy FIFA separation, and keeps the smart board optional."
 }
