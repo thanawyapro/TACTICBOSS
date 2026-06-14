@@ -1,6 +1,6 @@
 {
-  "version": "v130.2-web-production-final-launch-authentic-tactics-unified-ui",
-  "build": "github-netlify-prebuilt-no-npm-v130.2-launch",
+  "version": "v131-web-production-final-preferred-game-smart-board-session-resume-language-clean",
+  "build": "github-netlify-prebuilt-no-npm-v131-final-launch",
   "requiresClearCache": true,
-  "notes": "V130.2 keeps every proven core workflow, restores permanent bottom navigation, removes retired duplicate modules, unifies the premium interface, and adds authentic PES numeric settings, eFootball player-targeted individual instructions, FC IQ for FC 25/26 and legacy Custom Tactics for earlier FIFA/FC editions."
+  "notes": "V131 removes repeated game selection, uses the preferred game profile across every section, adds smart board show/hide with board-aware evaluation, keeps the permanent bottom navigation, fixes session resume and autosave, cleans user-facing language, and preserves authentic game DNA for PES, eFootball and EA FC/FIFA."
 }
