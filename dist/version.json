@@ -1,6 +1,6 @@
 {
-  "version": "v130-web-production-final-coach-os-instant-rescue-memory-rival-passport-arena",
-  "build": "web-production-final-prebuilt-no-npm-v130-premium-coach-os-cloud-ready",
+  "version": "v130.1-web-production-final-stability-ui-core-flows-game-dna-clean-player-ui",
+  "build": "github-netlify-prebuilt-no-npm-v130.1-stability",
   "requiresClearCache": true,
-  "notes": "V130 replaces the home experience with Coach OS, adds instant match rescue, a real tactical conflict detector, match journal and coach memory, opponent counter profiles, cross-game tactical passport, redesigned Trap Arena, autosave, resume and optional Supabase cloud sync."
+  "notes": "V130.1 restores the unified Tactic Boss identity, keeps the logo and branded loading experience across screens, prioritizes Build Your Tactic, Smart Coach and Counter Your Rival, removes internal technical messages from the player UI, and separates PES, eFootball, FC IQ and legacy FIFA/FC tactical settings."
 }
