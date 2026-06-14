@@ -1,6 +1,6 @@
 {
-  "version": "v131-web-production-final-preferred-game-smart-board-session-resume-language-clean",
-  "build": "github-netlify-prebuilt-no-npm-v131-final-launch",
+  "version": "v131.1-web-production-final-hard-verification-ui-meta-language-fixes",
+  "build": "github-netlify-prebuilt-no-npm-v131-1-hard-verification",
   "requiresClearCache": true,
-  "notes": "V131 removes repeated game selection, uses the preferred game profile across every section, adds smart board show/hide with board-aware evaluation, keeps the permanent bottom navigation, fixes session resume and autosave, cleans user-facing language, and preserves authentic game DNA for PES, eFootball and EA FC/FIFA."
+  "notes": "V131.1 fixes duplicate home shortcuts, duplicate board/share controls, restores Meta Center rendering, cleans Arabic labels and raw AI markers, makes the preferred game selector visible from the top bar, and requires target players for advanced instructions."
 }
