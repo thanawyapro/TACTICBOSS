@@ -1,5 +1,5 @@
 [build]
-  command = "echo 'Tactic Boss AI V130.1 prebuilt deploy: no npm install/build required'"
+  command = "echo 'Tactic Boss AI V130.2 prebuilt deploy: no npm install/build required'"
   publish = "dist"
 
 [functions]

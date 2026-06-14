@@ -1,6 +1,6 @@
 {
-  "version": "v130.1-web-production-final-stability-ui-core-flows-game-dna-clean-player-ui",
-  "build": "github-netlify-prebuilt-no-npm-v130.1-stability",
+  "version": "v130.2-web-production-final-launch-authentic-tactics-unified-ui",
+  "build": "github-netlify-prebuilt-no-npm-v130.2-launch",
   "requiresClearCache": true,
-  "notes": "V130.1 restores the unified Tactic Boss identity, keeps the logo and branded loading experience across screens, prioritizes Build Your Tactic, Smart Coach and Counter Your Rival, removes internal technical messages from the player UI, and separates PES, eFootball, FC IQ and legacy FIFA/FC tactical settings."
+  "notes": "V130.2 keeps every proven core workflow, restores permanent bottom navigation, removes retired duplicate modules, unifies the premium interface, and adds authentic PES numeric settings, eFootball player-targeted individual instructions, FC IQ for FC 25/26 and legacy Custom Tactics for earlier FIFA/FC editions."
 }

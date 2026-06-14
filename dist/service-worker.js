@@ -1,5 +1,5 @@
-const CACHE = 'tactic-boss-v130-1-stability-ui';
-const APP_SHELL = ['/', '/index.html', '/manifest.json?v=1301', '/offline.html', '/version.json'];
+const CACHE = 'tactic-boss-v130-2-launch-ui';
+const APP_SHELL = ['/', '/index.html', '/manifest.json?v=1302', '/offline.html', '/version.json'];
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(APP_SHELL)).then(() => self.skipWaiting()));
 });
