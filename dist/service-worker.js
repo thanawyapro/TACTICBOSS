@@ -1,5 +1,5 @@
-const CACHE = 'tactic-boss-v121-launch-transformation';
-const APP_SHELL = ['/', '/index.html', '/manifest.json?v=121', '/offline.html', '/version.json'];
+const CACHE = 'tactic-boss-v130-coach-os';
+const APP_SHELL = ['/', '/index.html', '/manifest.json?v=130', '/offline.html', '/version.json'];
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(APP_SHELL)).then(() => self.skipWaiting()));
 });

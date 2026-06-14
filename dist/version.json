@@ -1,6 +1,6 @@
 {
-  "version": "v121-launch-transformation-true-game-dna",
-  "build": "prebuilt-no-npm-pes-dna-manual-builder-text-analyst-language-settings",
+  "version": "v130-web-production-final-coach-os-instant-rescue-memory-rival-passport-arena",
+  "build": "web-production-final-prebuilt-no-npm-v130-premium-coach-os-cloud-ready",
   "requiresClearCache": true,
-  "notes": "V121 separates classic PES tactics from modern eFootball, restores the full manual tactic builder, moves text-first tactical analysis into My Tactics, improves contextual AI coaching, fixes mixed-language labels, and restructures account settings for launch."
+  "notes": "V130 replaces the home experience with Coach OS, adds instant match rescue, a real tactical conflict detector, match journal and coach memory, opponent counter profiles, cross-game tactical passport, redesigned Trap Arena, autosave, resume and optional Supabase cloud sync."
 }

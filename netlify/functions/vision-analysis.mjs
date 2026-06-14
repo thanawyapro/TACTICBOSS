@@ -83,30 +83,20 @@ function promptFor(kind, payload) {
 async function callGemini({ prompt, image }) {
   const key = process.env.GEMINI_API_KEY;
   if (!key) throw new Error('Missing GEMINI_API_KEY');
-  const configured = process.env.GEMINI_MODEL;
-  const configuredIsLegacyDefault = !configured || configured === 'gemini-2.5-flash-lite';
-  const models = [...new Set([configuredIsLegacyDefault ? null : configured, 'gemini-3.1-flash-lite', configured, 'gemini-2.5-flash-lite'].filter(Boolean))];
-  let lastError = null;
-  for (const model of models) {
-    try {
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ role: 'user', parts: [{ text: prompt }, { inline_data: { mime_type: image.mimeType, data: image.base64 } }] }],
-          generationConfig: { responseMimeType: 'application/json', temperature: 0.25, maxOutputTokens: 900 }
-        })
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error?.message || `Gemini ${res.status}`);
-      const text = data?.candidates?.[0]?.content?.parts?.map((p) => p.text || '').join('') || '';
-      return JSON.parse(text.replace(/^```json\s*/i, '').replace(/```$/i, '').trim());
-    } catch (error) {
-      lastError = error;
-    }
-  }
-  throw lastError || new Error('Gemini request failed');
+  const model = process.env.GEMINI_MODEL || 'gemini-2.5-flash-lite';
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{ role: 'user', parts: [{ text: prompt }, { inline_data: { mime_type: image.mimeType, data: image.base64 } }] }],
+      generationConfig: { responseMimeType: 'application/json', temperature: 0.2, maxOutputTokens: 800 }
+    })
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.error?.message || `Gemini ${res.status}`);
+  const text = data?.candidates?.[0]?.content?.parts?.map((p) => p.text || '').join('') || '';
+  return JSON.parse(text.replace(/^```json\s*/i, '').replace(/```$/i, '').trim());
 }
 
 async function callOpenAI({ prompt, dataUrl }) {
