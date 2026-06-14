@@ -1,34 +1,24 @@
-# ارفع Tactic Boss AI V130 على Netlify
+# رفع Tactic Boss AI V130 من GitHub إلى Netlify
 
-## 1. Supabase
-شغّل الملف التالي مرة واحدة داخل SQL Editor:
+هذه نسخة Prebuilt جاهزة، ولا تحتاج npm install أو npm run build.
 
-```text
-supabase-v130-coach-os-cloud-state.sql
-```
-
-ثم شغّل:
+## ترتيب الملفات الصحيح في جذر GitHub
 
 ```text
-supabase-v130-coach-os-cloud-state-verification.sql
+dist/
+netlify/
+netlify.toml
+READ_ME_FIRST_V130_PREBUILT_AR.md
 ```
 
-التطبيق يعمل محليًا بدون الـSQL، لكن تشغيله يجعل بيانات Coach OS تنتقل بين الأجهزة.
+مهم: لا ترفع مجلدًا خارجيًا يحتوي هذه الملفات. يجب أن يظهر `dist` و`netlify.toml` مباشرة في الصفحة الرئيسية للـRepository.
 
-## 2. متغيرات Netlify
+## خطوات الرفع
 
-```text
-GEMINI_API_KEY=...
-GEMINI_MODEL=gemini-3.5-flash
-REQUIRE_AUTH_FOR_AI=true
-ALLOW_AI_WITHOUT_USAGE_GUARD=false
-SUPABASE_URL=...
-SUPABASE_ANON_KEY=...
-VITE_SUPABASE_URL=...
-VITE_SUPABASE_ANON_KEY=...
-```
-
-## 3. إعداد Netlify للحزمة الجاهزة
+1. امسح محتويات الـRepository القديمة مع الحفاظ على مجلد `.git` إذا كنت تعمل محليًا.
+2. فك ضغط ملف V130 وانسخ الملفات الأربعة إلى جذر الـRepository مباشرة.
+3. ارفع التغييرات إلى GitHub.
+4. في Netlify استخدم:
 
 ```text
 Build command:
@@ -41,15 +31,11 @@ Functions directory:
 netlify/functions
 ```
 
-## 4. التحقق
-بعد النشر افتح:
+5. من Netlify اختر **Clear cache and deploy site** مرة واحدة.
+6. بعد نجاح النشر افتح:
 
 ```text
 /version.json?check=130
 ```
 
-ويجب أن يظهر:
-
-```text
-v130-web-production-final-coach-os-instant-rescue-memory-rival-passport-arena
-```
+المفروض يظهر إصدار V130.
