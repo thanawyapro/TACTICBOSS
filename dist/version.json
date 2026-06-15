@@ -1,6 +1,6 @@
 {
-  "version": "v131.2-web-production-final-tactics-settings-ux-hardfix",
-  "build": "github-netlify-prebuilt-no-npm-v131-2-tactics-settings-ux",
+  "version": "v131.3-web-production-final-hard-tactics-meta-restore",
+  "build": "github-netlify-prebuilt-no-npm-v131-3-hard-tactics-meta-restore",
   "requiresClearCache": true,
-  "notes": "V131.2 rebuilds the manual tactic settings UX into clear tabs, verifies game-specific settings, improves PES sliders, eFootball player-targeted instructions, FC IQ/legacy FIFA separation, and keeps the smart board optional."
+  "notes": "V131.3 removes noisy resume/preferences/match-analysis UI, restores actionable Meta Center cards, cleans game-specific tactical instructions, and limits player assignment only to Counter Target and Defensive where needed."
 }
