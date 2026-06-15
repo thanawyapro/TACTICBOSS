@@ -1,0 +1,14 @@
+{
+  "name": "Tactic Boss",
+  "description": "Professional football-game tactics coach with authentic per-game settings, plan building, rival counters, meta insights, community tactics and saved plans.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "Tactical Coach",
+    "Counter Your Rival",
+    "Authentic Manual Tactic Builder",
+    "Interactive Meta Center",
+    "Community Tactics",
+    "Saved Tactics"
+  ],
+  "version": "1.31.4"
+}

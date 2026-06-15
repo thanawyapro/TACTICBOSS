@@ -1,6 +1,0 @@
-{
-  "version": "v131.4-web-production-final-authentic-game-dna",
-  "build": "github-netlify-prebuilt-no-npm-v131-4-authentic-game-dna",
-  "date": "2026-06-15",
-  "notes": "V131.4 verifies game-specific tactics, separates PES and eFootball attacking and defensive instructions, covers all five eFootball Team Playstyles, and keeps the product focused on tactical tools."
-}
