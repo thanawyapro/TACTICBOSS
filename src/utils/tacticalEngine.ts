@@ -349,8 +349,7 @@ function buildCompactPlan(game: GameItem, input: GeneratorInput, lang: string): 
     const adv1 = againstLow ? 'تيكي تاكا' : againstWide ? 'توسيع الأطراف' : 'هدف للمرتدات';
     const adv2 = style === 'هجومي' || againstLow ? 'ظهيران مهاجمان' : 'لاعب ثابت في العمق';
     const def1 = Number(line) <= 4 ? 'خط دفاع منخفض' : 'رقابة لصيقة';
-    const def2 = againstWide ? 'مساندة الظهير' : 'تكدس داخل الصندوق';
-
+    let def2 = againstWide ? "مساندة الظهير" : "تكدس داخل الصندوق";
     // V131.6 Deep Improvement: Contextual advanced instructions based on Tight Marking target
     if (isPes && tightMarkTarget) {
       defence['رقابة لصيقة على'] = tightMarkTarget;
