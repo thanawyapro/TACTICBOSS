@@ -1,4 +1,4 @@
-const CACHE = 'tactic-boss-v131-1-hard-verification';
+const CACHE = 'tactic-boss-v131-4-game-dna';
 const APP_SHELL = ['/', '/index.html', '/manifest.json?v=1310', '/offline.html', '/version.json'];
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(APP_SHELL)).then(() => self.skipWaiting()));
