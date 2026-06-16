@@ -4,8 +4,9 @@
   "version": "1.31.5",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "vite --host 0.0.0.0",
     "build": "vite build",
+    "start": "vite preview --host 0.0.0.0",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
@@ -31,7 +32,8 @@
     "lucide-react": "^0.546.0",
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
-    "typescript": "~5.8.2"
+    "typescript": "~5.8.2",
+    "vite": "8.0.16"
   },
   "devDependencies": {
     "@playwright/test": "^1.60.0",
@@ -44,7 +46,6 @@
     "autoprefixer": "^10.4.21",
     "jsdom": "^29.1.1",
     "tailwindcss": "^4.1.14",
-    "vite": "5.4.21",
     "vitest": "^4.1.8"
   },
   "description": "Tactic Boss V131.4 game-DNA release: authentic PES/eFootball/EA FC settings, diversified playstyles, and no chat or AI-facing branding.",
