@@ -1,0 +1,6 @@
+{
+  "version": "v131.10-play-prep",
+  "build": "v131.10-web-production-final-play-preparation",
+  "date": "2026-06-16",
+  "notes": "V131.10: Started Google Play preparation phase. Improved PWA manifest, enhanced Arabic description, added shortcuts. UX improvements from previous version maintained. Ready for Android App Bundle generation and store listing."
+}
