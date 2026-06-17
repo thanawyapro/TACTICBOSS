@@ -140,8 +140,8 @@ function langNameFor(lang) {
 }
 
 function extractJson(text) {
-  const cleaned = String(text || '').replace(/^```json\s*/i, '').replace(/
-```$/i, '').trim();
+  const regexJson = new RegExp('```json\\s*', 'i');
+  const cleaned = String(text || '').replace(regexJson, '').replace(/```$/i, '').trim();
   return JSON.parse(cleaned || '{}');
 }
 
