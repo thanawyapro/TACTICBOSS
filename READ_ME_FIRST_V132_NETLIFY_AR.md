@@ -1,11 +1,34 @@
-# حزمة Netlify الجاهزة — Tactic Boss V132
+# Tactic Boss V132 — رفع GitHub ثم Netlify (نسخة Prebuilt مصححة)
 
-الحزمة تحتوي على:
-- dist/
-- netlify/functions/
-- netlify.toml
+هذه الحزمة لا تحتاج `package.json` ولا `npm install` ولا `npm run build`.
 
-للنشر عبر GitHub: ارفع المحتويات إلى جذر المستودع ثم نفّذ Clear cache and deploy site.
-للنشر اليدوي السريع: يمكن رفع مجلد dist إلى Netlify Drop، لكن وظائف Netlify لن تعمل في النشر اليدوي لمجلد dist وحده.
+## الرفع الصحيح
 
-بعد النشر افتح /version.json وتأكد أن الإصدار هو v132.0-builder-trust.
+ارفع محتويات ZIP مباشرة إلى جذر مستودع GitHub، بحيث يظهر في الجذر:
+
+- `dist/`
+- `netlify/`
+- `netlify.toml`
+- ملفات التعليمات والتقرير
+
+لا ترفع المجلد الأب نفسه، ولا تضع الملفات داخل مجلد إضافي.
+
+## بعد الـPush
+
+في Netlify اختر:
+
+`Deploys → Trigger deploy → Clear cache and deploy site`
+
+الإعدادات الصحيحة:
+
+- Build command: رسالة فقط، بدون npm
+- Publish directory: `dist`
+- Functions directory: `netlify/functions`
+
+إذا ظهر في سجل Netlify الأمر `npm run build`، فهذا يعني أن المستودع ما زال يحتوي نسخة قديمة من `netlify.toml` أو أن ملفات ZIP لم تُرفع إلى جذر المستودع.
+
+## التحقق
+
+بعد نجاح النشر افتح:
+
+`/version.json?check=13200`

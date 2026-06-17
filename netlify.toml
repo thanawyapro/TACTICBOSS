@@ -1,6 +1,7 @@
 [build]
   publish = "dist"
-  command = "npm run build"
+  functions = "netlify/functions"
+  command = "echo 'Tactic Boss V132: using verified prebuilt dist — no npm build required'"
 
 [[redirects]]
   from = "/*"
