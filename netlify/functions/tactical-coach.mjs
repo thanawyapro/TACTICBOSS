@@ -140,7 +140,8 @@ function langNameFor(lang) {
 }
 
 function extractJson(text) {
-  const cleaned = String(text || '').replace(/^```json\s*/i, '').replace(/```$/i, '').trim();
+  const cleaned = String(text || '').replace(/^```json\s*/i, '').replace(/
+```$/i, '').trim();
   return JSON.parse(cleaned || '{}');
 }
 
@@ -226,7 +227,7 @@ Return JSON only: {"tips":["...","...","..."],"conflicts":["..."],"quickActions"
     }
     const res = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
-      body: JSON.stringify({ model: process.env.OPENAI_MODEL || 'gpt-4.1-mini', messages: [{ role: 'system', content: system }, { role: 'user', content: user }], temperature: 0.25, max_tokens: 450, response_format: { type: 'json_object' } })
+      body: JSON.stringify({ model: process.env.OPENAI_MODEL || 'gpt-4o-mini', messages: [{ role: 'system', content: system }, { role: 'user', content: user }], temperature: 0.25, max_tokens: 450, response_format: { type: 'json_object' } })
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data?.error?.message || `OpenAI ${res.status}`);
