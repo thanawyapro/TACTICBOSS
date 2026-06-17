@@ -111,7 +111,7 @@ const fallbackTips = (lang = 'ar', body = {}) => {
     L(lang,
       game.includes('PES') ? 'في PES استخدم فقط Advanced Instructions الموجودة داخل Game Plan، ولا تعرض Player Styles كأنها تعليمات.' : 'التزم بتعليمات اللعبة المتاحة فقط، ولا تخلط بين PES و eFootball و EA FC.',
       game.includes('PES') ? 'In PES, use only Advanced Instructions from Game Plan; do not present Player Styles as instructions.' : 'Use only instructions available in the selected game; do not mix PES, eFootball and EA FC.',
-      game.includes('PES') ? 'En PES, usa solo Advanced Instructions de Game Plan; no presentes Player Styles como instrucciones.' : 'Usa solo instrucciones disponibles en el juego elegido; no mezcles PES, eFootball and EA FC.',
+      game.includes('PES') ? 'En PES, usa solo Advanced Instructions de Game Plan; no presentes Player Styles como instrucciones.' : 'Usa solo instrucciones disponibles en el juego elegido; no mezcles PES, eFootball y EA FC.',
       game.includes('PES') ? 'Dans PES, utilisez seulement les Advanced Instructions du Game Plan ; ne présentez pas les Player Styles comme consignes.' : 'Utilisez seulement les consignes disponibles dans le jeu choisi ; ne mélangez pas PES, eFootball et EA FC.'),
     L(lang,
       body.mode === 'counter' ? 'راقب جهة هجوم الخصم أول 10 دقائق، ثم فعّل التعليمات الدفاعية المناسبة فقط.' : 'لو الخطة لا تخلق فرصًا، غيّر منطقة الهجوم قبل تغيير التشكيلة.',
@@ -140,8 +140,7 @@ function langNameFor(lang) {
 }
 
 function extractJson(text) {
-  const regexJson = new RegExp('```json\\s*', 'i');
-  const cleaned = String(text || '').replace(regexJson, '').replace(/```$/i, '').trim();
+  const cleaned = String(text || '').replace(/^```json\s*/i, '').replace(/```$/i, '').trim();
   return JSON.parse(cleaned || '{}');
 }
 
@@ -227,7 +226,7 @@ Return JSON only: {"tips":["...","...","..."],"conflicts":["..."],"quickActions"
     }
     const res = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
-      body: JSON.stringify({ model: process.env.OPENAI_MODEL || 'gpt-4o-mini', messages: [{ role: 'system', content: system }, { role: 'user', content: user }], temperature: 0.25, max_tokens: 450, response_format: { type: 'json_object' } })
+      body: JSON.stringify({ model: process.env.OPENAI_MODEL || 'gpt-4.1-mini', messages: [{ role: 'system', content: system }, { role: 'user', content: user }], temperature: 0.25, max_tokens: 450, response_format: { type: 'json_object' } })
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data?.error?.message || `OpenAI ${res.status}`);

@@ -1,7 +1,7 @@
 {
   "name": "Tactic Boss",
   "short_name": "Tactic Boss",
-  "description": "أداة تكتيكية احترافية لبناء خطط قوية في بيس و eFootball. رقابة لصيقة، سبورة ذكية، وخطط يدوية متقدمة.",
+  "description": "أداة تكتيكية احترافية لبناء وتحليل خطط PES وeFootball وEA FC، مع تقييم مستقل للثقة، سبورة تفاعلية، خطط A/B/C ورقابة لصيقة.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
@@ -10,13 +10,13 @@
   "orientation": "portrait-primary",
   "icons": [
     {
-      "src": "/assets/icon-192.png?v=1310",
+      "src": "/assets/icon-192.png?v=13200",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "/assets/icon-512.png?v=1310",
+      "src": "/assets/icon-512.png?v=13200",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
