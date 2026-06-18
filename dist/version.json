@@ -1,6 +1,7 @@
 {
-  "version": "v132.3-sw-killer",
-  "build": "service-worker-emergency-fix",
-  "deployMode": "direct-root",
-  "notes": "No fetch handler; removes old broken service workers and caches."
+  "version": "v132.4-tailwind-fixed",
+  "build": "v132.4-tailwind-source-fix",
+  "date": "2026-06-18",
+  "notes": "Emergency deployment recovery: flat Netlify publish, forced home boot, stale service-worker removal, cache cleanup, and explicit no-cache HTML/runtime headers. Includes all V132 builder and trust features.",
+  "check": "1324"
 }
