@@ -1,7 +1,7 @@
 [build]
-  publish = "."
+  publish = "dist"
   functions = "netlify/functions"
-  command = "echo 'Tactic Boss V132.1 flat recovery: verified prebuilt files — no npm build required'"
+  command = "echo 'Tactic Boss V132.2: verified prebuilt dist — no npm build required'"
 
 [functions]
   node_bundler = "esbuild"
