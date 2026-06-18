@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, viewport-fit=cover" />
+    <title>Tactic Boss — Football Tactical Coach</title>
+    <meta name="description" content="أداة تكتيكية احترافية لبناء وتحليل خطط ألعاب كرة القدم." />
+    <meta name="application-name" content="Tactic Boss" />
+    <meta name="robots" content="index,follow" />
+    <meta property="og:title" content="Tactic Boss" />
+    <meta property="og:description" content="مركزك الاحترافي لبناء وتحليل الخطط التكتيكية." />
+    <meta property="og:type" content="website" />
+    <meta property="og:image" content="/assets/icon-512.png?v=13210" />
+    <link rel="manifest" href="/manifest.json?v=13210" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png?v=13210" />
+    <link rel="apple-touch-icon" href="/assets/icon-192.png?v=13210" />
+    <meta name="theme-color" content="#070b13" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <style>
+      html,body,#root{min-height:100%;margin:0}body{background:#070b13;color:#f8fafc;font-family:Arial,sans-serif}
+      .tb-boot{min-height:100vh;display:grid;place-items:center;padding:24px;box-sizing:border-box;background:radial-gradient(circle at top,#19143b 0,#070b13 46%,#03050a 100%)}
+      .tb-boot-card{width:min(360px,100%);padding:28px;border:1px solid rgba(139,92,246,.28);border-radius:28px;background:rgba(15,23,42,.84);box-shadow:0 24px 80px rgba(0,0,0,.42);text-align:center}
+      .tb-ball{font-size:44px;animation:tbPulse 1.2s ease-in-out infinite}.tb-boot h1{font-size:22px;margin:12px 0 6px}.tb-boot p{font-size:13px;color:#aeb8cb;margin:0;line-height:1.8}
+      @keyframes tbPulse{50%{transform:scale(1.08);opacity:.72}}
+    </style>
+    <script>
+      (function () {
+        var release = '132.1-recovery';
+        try {
+          if (localStorage.getItem('tb_boot_release') !== release) {
+            localStorage.setItem('tb_boot_release', release);
+            localStorage.removeItem('tb_last_screen');
+            localStorage.removeItem('tb_manual_builder_step');
+          }
+        } catch (_) {}
+        try {
+          if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.getRegistrations().then(function (items) {
+              items.forEach(function (registration) { registration.unregister(); });
+            }).catch(function () {});
+          }
+          if ('caches' in window) {
+            caches.keys().then(function (keys) {
+              return Promise.all(keys.filter(function (key) { return key.indexOf('tactic-boss') !== -1; }).map(function (key) { return caches.delete(key); }));
+            }).catch(function () {});
+          }
+        } catch (_) {}
+      })();
+    </script>
+    <script type="module" crossorigin src="/assets/index-1yVhIqWS.js"></script>
+    <link rel="modulepreload" crossorigin href="/assets/vendor-BPLh_deR.js">
+    <link rel="modulepreload" crossorigin href="/assets/react-vendor-BzdaMPXC.js">
+    <link rel="modulepreload" crossorigin href="/assets/supabase-vendor-CbQwSleJ.js">
+    <link rel="modulepreload" crossorigin href="/assets/icons-vendor-BIWRg04O.js">
+    <link rel="stylesheet" crossorigin href="/assets/index-DvO6DZfm.css">
+  </head>
+  <body>
+    <div id="root">
+      <main class="tb-boot" dir="rtl">
+        <section class="tb-boot-card">
+          <div class="tb-ball">⚽</div>
+          <h1>جاري فتح Tactic Boss</h1>
+          <p>يتم تحميل واجهة التطبيق وتنظيف ملفات الإصدار السابق…</p>
+        </section>
+      </main>
+    </div>
+    <script src="/runtime-config.js?v=13210"></script>
+  </body>
+</html>

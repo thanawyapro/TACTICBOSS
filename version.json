@@ -1,0 +1,6 @@
+{
+  "version": "v132.1-recovery-flat",
+  "build": "v132.1-flat-deploy-cache-recovery",
+  "date": "2026-06-18",
+  "notes": "Emergency deployment recovery: flat Netlify publish, forced home boot, stale service-worker removal, cache cleanup, and explicit no-cache HTML/runtime headers. Includes all V132 builder and trust features."
+}

@@ -1,6 +1,0 @@
-{
-  "version": "v132.0-builder-trust",
-  "build": "v132.0-full-builder-trust-release",
-  "date": "2026-06-18",
-  "notes": "V132.0: Rebuilt Build Your Tactic with quick/pro modes, exact-input evaluation, independent rating and confidence, complete PES settings, A/B/C plans, live conflict detection, previewable fixes, interactive tactical board, opponent profiling, autosave, glossary, plan comparison, and final readiness checks."
-}
