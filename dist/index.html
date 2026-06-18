@@ -10,10 +10,10 @@
     <meta property="og:title" content="Tactic Boss" />
     <meta property="og:description" content="مركزك الاحترافي لبناء وتحليل الخطط التكتيكية." />
     <meta property="og:type" content="website" />
-    <meta property="og:image" content="/assets/icon-512.png?v=13210" />
-    <link rel="manifest" href="/manifest.json?v=13210" />
-    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png?v=13210" />
-    <link rel="apple-touch-icon" href="/assets/icon-192.png?v=13210" />
+    <meta property="og:image" content="/assets/icon-512.png?v=13230" />
+    <link rel="manifest" href="/manifest.json?v=13230" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png?v=13230" />
+    <link rel="apple-touch-icon" href="/assets/icon-192.png?v=13230" />
     <meta name="theme-color" content="#070b13" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
@@ -27,7 +27,7 @@
     </style>
     <script>
       (function () {
-        var release = '132.1-recovery';
+        var release = '132.3-sw-killer';
         try {
           if (localStorage.getItem('tb_boot_release') !== release) {
             localStorage.setItem('tb_boot_release', release);
@@ -46,6 +46,19 @@
               return Promise.all(keys.filter(function (key) { return key.indexOf('tactic-boss') !== -1; }).map(function (key) { return caches.delete(key); }));
             }).catch(function () {});
           }
+
+        try {
+          window.addEventListener('load', function () {
+            if ('serviceWorker' in navigator) {
+              navigator.serviceWorker.register('/service-worker.js?v=13230').then(function (registration) {
+                registration.update().catch(function () {});
+                setTimeout(function () {
+                  registration.unregister().catch(function () {});
+                }, 1000);
+              }).catch(function () {});
+            }
+          });
+        } catch (_) {}
         } catch (_) {}
       })();
     </script>
@@ -66,6 +79,6 @@
         </section>
       </main>
     </div>
-    <script src="/runtime-config.js?v=13210"></script>
+    <script src="/runtime-config.js?v=13230"></script>
   </body>
 </html>

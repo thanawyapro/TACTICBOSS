@@ -1,6 +1,6 @@
 {
-  "version": "v132.2-netlify-404-fix",
-  "build": "v132.2-dual-deploy",
-  "date": "2026-06-18",
-  "notes": "Netlify 404 recovery: explicit dist publish for Git, root index for manual deploy."
+  "version": "v132.3-sw-killer",
+  "build": "service-worker-emergency-fix",
+  "deployMode": "direct-root",
+  "notes": "No fetch handler; removes old broken service workers and caches."
 }
